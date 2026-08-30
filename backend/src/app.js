@@ -6,7 +6,11 @@ import jwt from 'jsonwebtoken';
 
 import { env } from './config/env.js';
 import { prisma } from './config/prisma.js';
-import { getUserPermissions, hasPermission } from './services/rbacService.js';
+import {
+  getUserPermissions,
+  hasPermission,
+} from './services/rbacService.js';
+
 import { PERMISSIONS } from './config/permissions.js';
 
 import * as auth from './controllers/authController.js';
@@ -18,11 +22,26 @@ import { ensureStorage } from './services/storageService.js';
 
 const app = express();
 
+/*
+|--------------------------------------------------------------------------
+| STORAGE
+|--------------------------------------------------------------------------
+*/
 await ensureStorage();
 
-/* =========================================================
-   CORS
-   ========================================================= */
+/*
+|--------------------------------------------------------------------------
+| CORS
+|--------------------------------------------------------------------------
+|
+| Production frontend:
+| https://triple-e-folder-management-system.vercel.app
+|
+| Local development:
+| http://localhost:5173
+|
+|--------------------------------------------------------------------------
+*/
 
 const allowedOrigins = [
   'https://triple-e-folder-management-system.vercel.app',
@@ -32,7 +51,8 @@ const allowedOrigins = [
 app.use(
   cors({
     origin: (origin, callback) => {
-      // Requests without Origin are allowed
+      // Allow requests without an Origin header
+      // e.g. health checks, curl, server-to-server requests.
       if (!origin) {
         return callback(null, true);
       }
@@ -41,11 +61,9 @@ app.use(
         return callback(null, true);
       }
 
-      console.log('CORS blocked origin:', origin);
+      console.warn(`CORS blocked origin: ${origin}`);
 
-      // Do not throw an error here.
-      // Return false so the request is rejected normally.
-      return callback(null, false);
+      return callback(new Error('Not allowed by CORS'));
     },
 
     credentials: true,
@@ -54,37 +72,50 @@ app.use(
       'GET',
       'POST',
       'PUT',
-      'DELETE',
       'PATCH',
+      'DELETE',
       'OPTIONS',
     ],
 
     allowedHeaders: [
       'Content-Type',
       'Authorization',
+      'Accept',
+      'Origin',
     ],
   })
 );
 
-/* =========================================================
-   BODY PARSERS
-   ========================================================= */
+/*
+|--------------------------------------------------------------------------
+| BODY PARSERS
+|--------------------------------------------------------------------------
+*/
 
 app.use(express.json({ limit: '2mb' }));
-app.use(express.urlencoded({ extended: true }));
 
-/* =========================================================
-   STATIC UPLOADS
-   ========================================================= */
+app.use(
+  express.urlencoded({
+    extended: true,
+  })
+);
+
+/*
+|--------------------------------------------------------------------------
+| STATIC UPLOADS
+|--------------------------------------------------------------------------
+*/
 
 app.use(
   '/uploads',
   express.static(path.resolve(env.UPLOAD_DIR))
 );
 
-/* =========================================================
-   HEALTH CHECK
-   ========================================================= */
+/*
+|--------------------------------------------------------------------------
+| HEALTH CHECK
+|--------------------------------------------------------------------------
+*/
 
 app.get('/api/health', (req, res) => {
   res.json({
@@ -94,9 +125,11 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-/* =========================================================
-   AUTHENTICATION MIDDLEWARE
-   ========================================================= */
+/*
+|--------------------------------------------------------------------------
+| AUTH MIDDLEWARE
+|--------------------------------------------------------------------------
+*/
 
 const authMw = async (req, res, next) => {
   try {
@@ -146,6 +179,8 @@ const authMw = async (req, res, next) => {
 
     next();
   } catch (error) {
+    console.error('Authentication error:', error);
+
     const message =
       error?.name === 'TokenExpiredError'
         ? 'Your session has expired. Please sign in again.'
@@ -157,12 +192,15 @@ const authMw = async (req, res, next) => {
   }
 };
 
-/* =========================================================
-   FILE UPLOAD CONFIGURATION
-   ========================================================= */
+/*
+|--------------------------------------------------------------------------
+| FILE UPLOAD
+|--------------------------------------------------------------------------
+*/
 
 const upload = multer({
   storage: multer.memoryStorage(),
+
   limits: {
     fileSize:
       env.MAX_FILE_SIZE_MB * 1024 * 1024,
@@ -171,16 +209,23 @@ const upload = multer({
 
 const profileUpload = multer({
   storage: multer.memoryStorage(),
+
   limits: {
     fileSize: 5 * 1024 * 1024,
   },
 });
 
-/* =========================================================
-   OWNER / MANAGER
-   ========================================================= */
+/*
+|--------------------------------------------------------------------------
+| DOCUMENT OWNER / ADMIN MIDDLEWARE
+|--------------------------------------------------------------------------
+*/
 
-async function ownerOrManager(req, res, next) {
+async function ownerOrManager(
+  req,
+  res,
+  next
+) {
   try {
     if (
       req.user.isSuperAdmin ||
@@ -189,14 +234,16 @@ async function ownerOrManager(req, res, next) {
       return next();
     }
 
-    const doc = await prisma.document.findUnique({
-      where: {
-        id: req.params.id,
-      },
-      select: {
-        uploadedById: true,
-      },
-    });
+    const doc =
+      await prisma.document.findUnique({
+        where: {
+          id: req.params.id,
+        },
+
+        select: {
+          uploadedById: true,
+        },
+      });
 
     if (!doc) {
       return res.status(404).json({
@@ -204,7 +251,9 @@ async function ownerOrManager(req, res, next) {
       });
     }
 
-    if (doc.uploadedById !== req.user.id) {
+    if (
+      doc.uploadedById !== req.user.id
+    ) {
       return res.status(403).json({
         message:
           'You can only manage your own documents.',
@@ -213,13 +262,22 @@ async function ownerOrManager(req, res, next) {
 
     next();
   } catch (error) {
-    next(error);
-  }
-};
+    console.error(
+      'ownerOrManager error:',
+      error
+    );
 
-/* =========================================================
-   AUTH ROUTES
-   ========================================================= */
+    return res.status(500).json({
+      message: 'Internal server error.',
+    });
+  }
+}
+
+/*
+|--------------------------------------------------------------------------
+| AUTH ROUTES
+|--------------------------------------------------------------------------
+*/
 
 app.post(
   '/api/auth/login',
@@ -232,9 +290,11 @@ app.get(
   auth.me
 );
 
-/* =========================================================
-   PROFILE ROUTES
-   ========================================================= */
+/*
+|--------------------------------------------------------------------------
+| PROFILE ROUTES
+|--------------------------------------------------------------------------
+*/
 
 app.get(
   '/api/profile',
@@ -245,14 +305,18 @@ app.get(
 app.put(
   '/api/profile',
   authMw,
-  hasPermission(PERMISSIONS.PROFILE_UPDATE),
+  hasPermission(
+    PERMISSIONS.PROFILE_UPDATE
+  ),
   users.saveProfile
 );
 
 app.post(
   '/api/profile/photo',
   authMw,
-  hasPermission(PERMISSIONS.PROFILE_UPDATE),
+  hasPermission(
+    PERMISSIONS.PROFILE_UPDATE
+  ),
   profileUpload.single('photo'),
   users.uploadProfilePhoto
 );
@@ -260,221 +324,291 @@ app.post(
 app.put(
   '/api/profile/password',
   authMw,
-  hasPermission(PERMISSIONS.PROFILE_UPDATE),
+  hasPermission(
+    PERMISSIONS.PROFILE_UPDATE
+  ),
   users.password
 );
 
-/* =========================================================
-   USER ROUTES
-   ========================================================= */
+/*
+|--------------------------------------------------------------------------
+| USER ROUTES
+|--------------------------------------------------------------------------
+*/
 
 app.get(
   '/api/users',
   authMw,
-  hasPermission(PERMISSIONS.USER_VIEW),
+  hasPermission(
+    PERMISSIONS.USER_VIEW
+  ),
   users.users
 );
 
 app.get(
   '/api/users/:id',
   authMw,
-  hasPermission(PERMISSIONS.USER_VIEW),
+  hasPermission(
+    PERMISSIONS.USER_VIEW
+  ),
   users.userById
 );
 
 app.get(
   '/api/users/:id/permissions',
   authMw,
-  hasPermission(PERMISSIONS.ROLE_MANAGE),
+  hasPermission(
+    PERMISSIONS.ROLE_MANAGE
+  ),
   users.userPermissions
 );
 
 app.put(
   '/api/users/:id/permissions',
   authMw,
-  hasPermission(PERMISSIONS.ROLE_MANAGE),
+  hasPermission(
+    PERMISSIONS.ROLE_MANAGE
+  ),
   users.saveUserPermissions
 );
 
 app.post(
   '/api/users',
   authMw,
-  hasPermission(PERMISSIONS.USER_CREATE),
+  hasPermission(
+    PERMISSIONS.USER_CREATE
+  ),
   users.addUser
 );
 
 app.put(
   '/api/users/:id',
   authMw,
-  hasPermission(PERMISSIONS.USER_UPDATE),
+  hasPermission(
+    PERMISSIONS.USER_UPDATE
+  ),
   users.editUser
 );
 
 app.delete(
   '/api/users/:id',
   authMw,
-  hasPermission(PERMISSIONS.USER_DELETE),
+  hasPermission(
+    PERMISSIONS.USER_DELETE
+  ),
   users.removeUser
 );
 
-/* =========================================================
-   DASHBOARD
-   ========================================================= */
+/*
+|--------------------------------------------------------------------------
+| DASHBOARD
+|--------------------------------------------------------------------------
+*/
 
 app.get(
   '/api/dashboard',
   authMw,
-  hasPermission(PERMISSIONS.DASHBOARD_VIEW),
+  hasPermission(
+    PERMISSIONS.DASHBOARD_VIEW
+  ),
   admin.dashboard
 );
 
-/* =========================================================
-   ADMIN / ROLES
-   ========================================================= */
+/*
+|--------------------------------------------------------------------------
+| ADMIN / ROLES
+|--------------------------------------------------------------------------
+*/
 
 app.get(
   '/api/admin/roles',
   authMw,
-  hasPermission(PERMISSIONS.ROLE_MANAGE),
+  hasPermission(
+    PERMISSIONS.ROLE_MANAGE
+  ),
   admin.roles
 );
 
 app.get(
   '/api/admin/permissions',
   authMw,
-  hasPermission(PERMISSIONS.ROLE_MANAGE),
+  hasPermission(
+    PERMISSIONS.ROLE_MANAGE
+  ),
   admin.permissions
 );
 
 app.put(
   '/api/admin/roles/:id',
   authMw,
-  hasPermission(PERMISSIONS.ROLE_MANAGE),
+  hasPermission(
+    PERMISSIONS.ROLE_MANAGE
+  ),
   admin.roleUpdate
 );
 
-/* =========================================================
-   ADMIN / SETTINGS
-   ========================================================= */
+/*
+|--------------------------------------------------------------------------
+| ADMIN / SETTINGS
+|--------------------------------------------------------------------------
+*/
 
 app.get(
   '/api/admin/settings',
   authMw,
-  hasPermission(PERMISSIONS.SETTINGS_MANAGE),
+  hasPermission(
+    PERMISSIONS.SETTINGS_MANAGE
+  ),
   admin.settings
 );
 
 app.put(
   '/api/admin/settings',
   authMw,
-  hasPermission(PERMISSIONS.SETTINGS_MANAGE),
+  hasPermission(
+    PERMISSIONS.SETTINGS_MANAGE
+  ),
   admin.settingUpdate
 );
 
-/* =========================================================
-   ADMIN / AUDIT LOGS
-   ========================================================= */
+/*
+|--------------------------------------------------------------------------
+| ADMIN / AUDIT LOGS
+|--------------------------------------------------------------------------
+*/
 
 app.get(
   '/api/admin/audit-logs',
   authMw,
-  hasPermission(PERMISSIONS.AUDIT_VIEW),
+  hasPermission(
+    PERMISSIONS.AUDIT_VIEW
+  ),
   admin.auditLogs
 );
 
-/* =========================================================
-   CATEGORY ROUTES
-   ========================================================= */
+/*
+|--------------------------------------------------------------------------
+| CATEGORY ROUTES
+|--------------------------------------------------------------------------
+*/
 
 app.get(
   '/api/categories',
   authMw,
-  hasPermission(PERMISSIONS.DOCUMENT_VIEW),
+  hasPermission(
+    PERMISSIONS.DOCUMENT_VIEW
+  ),
   resources.categories
 );
 
 app.post(
   '/api/categories',
   authMw,
-  hasPermission(PERMISSIONS.CATEGORY_MANAGE),
+  hasPermission(
+    PERMISSIONS.CATEGORY_MANAGE
+  ),
   resources.addCategory
 );
 
 app.put(
   '/api/categories/:id',
   authMw,
-  hasPermission(PERMISSIONS.CATEGORY_MANAGE),
+  hasPermission(
+    PERMISSIONS.CATEGORY_MANAGE
+  ),
   resources.editCategory
 );
 
 app.delete(
   '/api/categories/:id',
   authMw,
-  hasPermission(PERMISSIONS.CATEGORY_MANAGE),
+  hasPermission(
+    PERMISSIONS.CATEGORY_MANAGE
+  ),
   resources.removeCategory
 );
 
-/* =========================================================
-   FOLDER ROUTES
-   ========================================================= */
+/*
+|--------------------------------------------------------------------------
+| FOLDER ROUTES
+|--------------------------------------------------------------------------
+*/
 
 app.get(
   '/api/folders',
   authMw,
-  hasPermission(PERMISSIONS.FOLDER_VIEW),
+  hasPermission(
+    PERMISSIONS.FOLDER_VIEW
+  ),
   resources.folders
 );
 
 app.get(
   '/api/folders/:id',
   authMw,
-  hasPermission(PERMISSIONS.FOLDER_VIEW),
+  hasPermission(
+    PERMISSIONS.FOLDER_VIEW
+  ),
   resources.folder
 );
 
 app.post(
   '/api/folders',
   authMw,
-  hasPermission(PERMISSIONS.FOLDER_CREATE),
+  hasPermission(
+    PERMISSIONS.FOLDER_CREATE
+  ),
   resources.addFolder
 );
 
 app.put(
   '/api/folders/:id',
   authMw,
-  hasPermission(PERMISSIONS.FOLDER_UPDATE),
+  hasPermission(
+    PERMISSIONS.FOLDER_UPDATE
+  ),
   resources.editFolder
 );
 
 app.delete(
   '/api/folders/:id',
   authMw,
-  hasPermission(PERMISSIONS.FOLDER_DELETE),
-  resources.removeFolder
+  hasPermission(
+    PERMISSIONS.FOLDER_DELETE
+  ),
+  resources.deleteFolder
 );
 
-/* =========================================================
-   DOCUMENT ROUTES
-   ========================================================= */
+/*
+|--------------------------------------------------------------------------
+| DOCUMENT ROUTES
+|--------------------------------------------------------------------------
+*/
 
 app.get(
   '/api/documents',
   authMw,
-  hasPermission(PERMISSIONS.DOCUMENT_VIEW),
+  hasPermission(
+    PERMISSIONS.DOCUMENT_VIEW
+  ),
   resources.documents
 );
 
 app.get(
   '/api/documents/:id',
   authMw,
-  hasPermission(PERMISSIONS.DOCUMENT_VIEW),
+  hasPermission(
+    PERMISSIONS.DOCUMENT_VIEW
+  ),
   resources.document
 );
 
 app.post(
   '/api/documents',
   authMw,
-  hasPermission(PERMISSIONS.DOCUMENT_CREATE),
+  hasPermission(
+    PERMISSIONS.DOCUMENT_CREATE
+  ),
   upload.single('file'),
   resources.uploadDocument
 );
@@ -482,7 +616,9 @@ app.post(
 app.put(
   '/api/documents/:id',
   authMw,
-  hasPermission(PERMISSIONS.DOCUMENT_UPDATE),
+  hasPermission(
+    PERMISSIONS.DOCUMENT_UPDATE
+  ),
   ownerOrManager,
   resources.editDocument
 );
@@ -490,54 +626,99 @@ app.put(
 app.delete(
   '/api/documents/:id',
   authMw,
-  hasPermission(PERMISSIONS.DOCUMENT_DELETE),
+  hasPermission(
+    PERMISSIONS.DOCUMENT_DELETE
+  ),
   ownerOrManager,
   resources.removeDocument
 );
 
-/* =========================================================
-   STATISTICS
-   ========================================================= */
+/*
+|--------------------------------------------------------------------------
+| STATISTICS
+|--------------------------------------------------------------------------
+*/
 
 app.get(
   '/api/stats/category',
   authMw,
-  hasPermission(PERMISSIONS.DASHBOARD_VIEW),
+  hasPermission(
+    PERMISSIONS.DASHBOARD_VIEW
+  ),
   resources.stats
 );
 
-/* =========================================================
-   GLOBAL ERROR HANDLER
-   ========================================================= */
+/*
+|--------------------------------------------------------------------------
+| 404 HANDLER
+|--------------------------------------------------------------------------
+*/
 
-app.use((err, req, res, next) => {
-  console.error(err);
-
-  if (err instanceof multer.MulterError) {
-    return res.status(400).json({
-      message: err.message,
-    });
-  }
-
-  return res.status(500).json({
-    message:
-      err?.message ||
-      'Internal server error.',
+app.use((req, res) => {
+  res.status(404).json({
+    message: `Route not found: ${req.method} ${req.originalUrl}`,
   });
 });
 
-/* =========================================================
-   GRACEFUL SHUTDOWN
-   ========================================================= */
+/*
+|--------------------------------------------------------------------------
+| GLOBAL ERROR HANDLER
+|--------------------------------------------------------------------------
+*/
 
-process.on('SIGINT', async () => {
-  await prisma.$disconnect();
-  process.exit(0);
-});
+app.use(
+  (err, req, res, next) => {
+    console.error(
+      'GLOBAL ERROR:',
+      err
+    );
 
-process.on('SIGTERM', async () => {
-  await prisma.$disconnect();
-  process.exit(0);
-});
+    if (
+      err instanceof multer.MulterError
+    ) {
+      return res.status(400).json({
+        message: err.message,
+      });
+    }
+
+    if (
+      err?.message ===
+      'Not allowed by CORS'
+    ) {
+      return res.status(403).json({
+        message:
+          'CORS policy blocked this request.',
+      });
+    }
+
+    return res.status(500).json({
+      message:
+        err?.message ||
+        'Internal server error.',
+    });
+  }
+);
+
+/*
+|--------------------------------------------------------------------------
+| DATABASE CLEANUP
+|--------------------------------------------------------------------------
+*/
+
+process.on(
+  'SIGINT',
+  async () => {
+    await prisma.$disconnect();
+    process.exit(0);
+  }
+);
+
+process.on(
+  'SIGTERM',
+  async () => {
+    await prisma.$disconnect();
+    process.exit(0);
+  }
+);
 
 export default app;
