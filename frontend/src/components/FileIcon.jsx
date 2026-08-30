@@ -1,0 +1,1 @@
+export default function FileIcon({mime=''}){const text=mime.includes('pdf')?'PDF':mime.includes('image')?'IMG':mime.includes('word')?'DOC':mime.includes('sheet')?'XLS':'FILE';return <span style={{fontSize:11,fontWeight:800,border:'1px solid #cbd5e1',padding:'4px 6px',borderRadius:6}}>{text}</span>}

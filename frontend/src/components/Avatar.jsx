@@ -1,0 +1,1 @@
+export default function Avatar({name='User',src,size=42}){return src?<img src={src} alt={name} style={{width:size,height:size,borderRadius:'50%',objectFit:'cover'}}/>:<div style={{width:size,height:size,borderRadius:'50%',background:'#ccfbf1',color:'#115e59',display:'grid',placeItems:'center',fontWeight:800}}>{name.slice(0,1).toUpperCase()}</div>}
