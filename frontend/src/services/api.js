@@ -1,6 +1,6 @@
 const API_URL =
   import.meta.env.VITE_API_URL ||
-  'https://triple-e-folder-management-system.onrender.com';
+  'https://triple-e-folder-management-system.onrender.com/api';
 
 const token = () => localStorage.getItem('tripleE_token');
 
@@ -53,7 +53,7 @@ async function request(
 }
 
 export const api = {
-  baseUrl: API_URL,
+  baseUrl: API_URL.replace(/\/api$/, ''),
 
   // AUTH
   login: (email, password) =>
