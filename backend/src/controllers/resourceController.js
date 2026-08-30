@@ -29,6 +29,8 @@ export const editFolder = async (req, res) => {
   });
   await audit({ userId: req.user.id, action: 'UPDATE', entity: 'Folder', entityId: f.id }); res.json(f);
 };
+
+// deleteFolder renamed to removeFolder to match app.js route handler naming convention
 export const removeFolder = async (req, res) => { await deleteFolder(req.params.id); await audit({ userId: req.user.id, action: 'DELETE', entity: 'Folder', entityId: req.params.id }); res.json({ message: 'Folder deleted.' }); };
 
 export const documents = async (req, res) => res.json(await listDocuments(req.query, req.user));

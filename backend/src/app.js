@@ -589,7 +589,7 @@ app.delete(
   hasPermission(
     PERMISSIONS.FOLDER_DELETE
   ),
-  resources.deleteFolder
+  resources.removeFolder
 );
 
 /*
