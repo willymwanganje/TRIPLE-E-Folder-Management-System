@@ -36,7 +36,7 @@ async function request(
   try {
     data = await response.json();
   } catch {
-    // Response has no JSON body
+    // No JSON response
   }
 
   if (response.status === 401 && path !== '/auth/login') {
@@ -55,7 +55,6 @@ async function request(
 export const api = {
   baseUrl: API_URL.replace(/\/api$/, ''),
 
-  // AUTH
   login: (email, password) =>
     request('/auth/login', {
       method: 'POST',
@@ -64,10 +63,8 @@ export const api = {
 
   me: () => request('/auth/me'),
 
-  // DASHBOARD
   dashboard: () => request('/dashboard'),
 
-  // PROFILE
   profile: () => request('/profile'),
 
   saveProfile: (data) =>
@@ -88,7 +85,6 @@ export const api = {
       body: data,
     }),
 
-  // USERS
   users: () => request('/users'),
 
   user: (id) => request(`/users/${id}`),
@@ -119,7 +115,6 @@ export const api = {
       method: 'DELETE',
     }),
 
-  // CATEGORIES
   categories: () => request('/categories'),
 
   createCategory: (data) =>
@@ -139,7 +134,6 @@ export const api = {
       method: 'DELETE',
     }),
 
-  // FOLDERS
   folders: (q = '') =>
     request(`/folders${q}`),
 
@@ -163,7 +157,6 @@ export const api = {
       method: 'DELETE',
     }),
 
-  // DOCUMENTS
   documents: (q = '') =>
     request(`/documents${q}`),
 
@@ -187,7 +180,6 @@ export const api = {
       method: 'DELETE',
     }),
 
-  // ADMIN / ROLES
   roles: () =>
     request('/admin/roles'),
 
@@ -200,7 +192,6 @@ export const api = {
       body: data,
     }),
 
-  // ADMIN / SETTINGS
   settings: () =>
     request('/admin/settings'),
 
@@ -210,7 +201,6 @@ export const api = {
       body: data,
     }),
 
-  // ADMIN / AUDIT LOGS
   auditLogs: (q = '') =>
     request(`/admin/audit-logs${q}`),
 };
