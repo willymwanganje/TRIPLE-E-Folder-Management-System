@@ -31,10 +31,38 @@ const allowedOrigins = [
 
 app.use(
   cors({
-    origin: allowedOrigins,
+    origin: (origin, callback) => {
+      // Requests without Origin are allowed
+      if (!origin) {
+        return callback(null, true);
+      }
+
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+
+      console.log('CORS blocked origin:', origin);
+
+      // Do not throw an error here.
+      // Return false so the request is rejected normally.
+      return callback(null, false);
+    },
+
     credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
+
+    methods: [
+      'GET',
+      'POST',
+      'PUT',
+      'DELETE',
+      'PATCH',
+      'OPTIONS',
+    ],
+
+    allowedHeaders: [
+      'Content-Type',
+      'Authorization',
+    ],
   })
 );
 
@@ -113,9 +141,7 @@ const authMw = async (req, res, next) => {
       profilePhotoUrl: user.profilePhotoUrl,
       isSuperAdmin: user.isSuperAdmin,
       role: user.role,
-      permissions: await getUserPermissions(
-        user.id
-      ),
+      permissions: await getUserPermissions(user.id),
     };
 
     next();
@@ -132,7 +158,7 @@ const authMw = async (req, res, next) => {
 };
 
 /* =========================================================
-   MULTER / FILE UPLOADS
+   FILE UPLOAD CONFIGURATION
    ========================================================= */
 
 const upload = multer({
@@ -490,12 +516,6 @@ app.use((err, req, res, next) => {
   if (err instanceof multer.MulterError) {
     return res.status(400).json({
       message: err.message,
-    });
-  }
-
-  if (err?.message === 'Not allowed by CORS') {
-    return res.status(403).json({
-      message: 'CORS origin not allowed.',
     });
   }
 
