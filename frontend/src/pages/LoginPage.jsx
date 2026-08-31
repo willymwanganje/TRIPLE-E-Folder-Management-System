@@ -12,6 +12,7 @@ export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   if (user) return <Navigate to="/" replace />;
 
@@ -39,6 +40,10 @@ export default function LoginPage() {
             <img
               src={logo}
               alt="Triple-E Logo"
+              onError={(e) => {
+                e.currentTarget.style.display = 'none';
+                e.currentTarget.parentElement.innerHTML = '<span style="font-size:34px;font-weight:900">✓</span>';
+              }}
             />
           </div>
 
@@ -76,15 +81,26 @@ export default function LoginPage() {
 
           <label className="password-label" htmlFor="login-password">
             Password
-            <input
-              id="login-password"
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              type="password"
-              placeholder="••••••••"
-              autoComplete="current-password"
-              required
-            />
+            <div className="password-input-wrap">
+              <input
+                id="login-password"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                type={showPassword ? 'text' : 'password'}
+                placeholder="••••••••"
+                autoComplete="current-password"
+                required
+              />
+              <button
+                type="button"
+                className="password-toggle"
+                onClick={() => setShowPassword((visible) => !visible)}
+                aria-label={showPassword ? 'Hide password' : 'Show password'}
+                title={showPassword ? 'Hide password' : 'Show password'}
+              >
+                {showPassword ? '◉' : '◌'}
+              </button>
+            </div>
           </label>
 
           <button className="login-button" type="submit" disabled={busy}>
@@ -127,11 +143,11 @@ export default function LoginPage() {
         .login-logo-box {
           display: grid;
           place-items: center;
-          width: 64px;
-          height: 64px;
+          width: 110px;
+          height: 110px;
           margin-bottom: 24px;
           border: 1px solid rgba(255,255,255,.35);
-          border-radius: 14px;
+          border-radius: 18px;
           background: rgba(255,255,255,.14);
           overflow: hidden;
         }
@@ -139,14 +155,9 @@ export default function LoginPage() {
         .login-logo-box img {
           width: 100%;
           height: 100%;
-          padding: 7px;
+          padding: 8px;
           object-fit: contain;
           background: #fff;
-        }
-
-        .login-logo-box span {
-          font-size: 34px;
-          font-weight: 900;
         }
 
         .brand-title {
@@ -223,9 +234,42 @@ export default function LoginPage() {
           font-size: 15px;
         }
 
+        .password-input-wrap {
+          position: relative;
+          width: 100%;
+        }
+
+        .password-input-wrap input {
+          padding-right: 46px;
+        }
+
         .login-card input:focus {
           border-color: #0f766e;
           box-shadow: 0 0 0 3px rgba(15,118,110,.12);
+        }
+
+        .password-toggle {
+          position: absolute;
+          top: 50%;
+          right: 10px;
+          display: grid;
+          width: 30px;
+          height: 30px;
+          padding: 0;
+          place-items: center;
+          transform: translateY(-50%);
+          border: 0;
+          border-radius: 6px;
+          background: transparent;
+          color: #64748b;
+          font-size: 20px;
+          line-height: 1;
+          cursor: pointer;
+        }
+
+        .password-toggle:hover {
+          background: #f1f5f9;
+          color: #0f766e;
         }
 
         .login-button {
@@ -274,9 +318,14 @@ export default function LoginPage() {
           }
 
           .login-logo-box {
-            width: 52px;
-            height: 52px;
-            margin-bottom: 16px;
+            width: 86px;
+            height: 86px;
+            margin-bottom: 18px;
+            border-radius: 14px;
+          }
+
+          .login-logo-box img {
+            padding: 6px;
           }
 
           .brand-title {
