@@ -4,6 +4,7 @@ import { api } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import Spinner from '../components/Spinner';
+import './DocumentsPage.css';
 
 /* ─── panel tabs (super admin only) ─── */
 const PANELS = [
