@@ -1,185 +1,157 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../services/api';
-import FileIcon from '../components/FileIcon';
-import Spinner from '../components/Spinner';
 import { useToast } from '../context/ToastContext';
+import './DocumentsPage.css';
 
-function SearchIcon() {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <circle cx="11" cy="11" r="6.5" />
-      <path d="m16 16 4 4" />
-    </svg>
-  );
-}
-
-function UploadIcon() {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <path d="M12 16V4" />
-      <path d="m7.5 8.5 4.5-4.5 4.5 4.5" />
-      <path d="M5 14.5v3A2.5 2.5 0 0 0 7.5 20h9a2.5 2.5 0 0 0 2.5-2.5v-3" />
-    </svg>
-  );
-}
-
-function ArrowUpRightIcon() {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <path d="M7 17 17 7" />
-      <path d="M8 7h9v9" />
-    </svg>
-  );
-}
-
-function CloseIcon() {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <path d="m7 7 10 10M17 7 7 17" />
-    </svg>
-  );
+function getFileType(document) {
+  const mime = document.mimeType || '';
+  if (mime.includes('pdf')) return 'PDF';
+  if (mime.includes('image')) return 'IMG';
+  if (mime.includes('word') || mime.includes('document')) return 'DOC';
+  if (mime.includes('sheet') || mime.includes('excel')) return 'XLS';
+  if (mime.includes('presentation') || mime.includes('powerpoint')) return 'PPT';
+  return 'FILE';
 }
 
 export default function DocumentsPage() {
   const [docs, setDocs] = useState(null);
-  const [q, setQ] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [query, setQuery] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
   const { push } = useToast();
 
-  const load = (search = q) => {
-    setLoading(true);
+  const loadDocuments = (searchValue = '') => {
+    setIsLoading(true);
 
-    api.documents(search ? `?search=${encodeURIComponent(search)}` : '')
+    const endpoint = searchValue.trim()
+      ? `?search=${encodeURIComponent(searchValue.trim())}`
+      : '';
+
+    api.documents(endpoint)
       .then(setDocs)
       .catch((error) => push(error.message, 'error'))
-      .finally(() => setLoading(false));
+      .finally(() => setIsLoading(false));
   };
 
   useEffect(() => {
-    load('');
-    // The initial request should run only once when the page mounts.
+    loadDocuments();
+    // Load documents once when the page opens.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const handleSearchSubmit = (event) => {
+  const submitSearch = (event) => {
     event.preventDefault();
-    load(q.trim());
+    loadDocuments(query);
   };
 
   const clearSearch = () => {
-    setQ('');
-    load('');
+    setQuery('');
+    loadDocuments('');
   };
 
-  if (!docs) return <Spinner />;
+  if (!docs) {
+    return (
+      <div className="docs2-loading">
+        <div className="docs2-loading-dot" />
+        <span>Loading documents...</span>
+      </div>
+    );
+  }
 
   return (
-    <main className="documents-page">
-      <section className="documents-container">
-        <div className="documents-header">
+    <main className="docs2-page">
+      <div className="docs2-wrapper">
+        <header className="docs2-header">
           <div>
-            <div className="eyebrow">Workspace library</div>
-            <h1 className="documents-title">Documents</h1>
-            <p className="documents-subtitle">
-              View and manage the files your account is allowed to access.
+            <div className="docs2-kicker">Workspace library</div>
+            <h1 className="docs2-title">Documents</h1>
+            <p className="docs2-subtitle">
+              View only the files your account is allowed to access.
             </p>
           </div>
 
-          <Link to="/upload" className="documents-upload-button">
-            <UploadIcon />
-            <span>Upload document</span>
+          <Link to="/upload" className="docs2-upload">
+            <span className="docs2-upload-plus">+</span>
+            Upload document
           </Link>
-        </div>
+        </header>
 
-        <div className="documents-toolbar">
-          <form className="documents-search" onSubmit={handleSearchSubmit}>
-            <SearchIcon />
+        <section className="docs2-toolbar">
+          <form className="docs2-search" onSubmit={submitSearch}>
+            <span className="docs2-search-symbol">⌕</span>
             <input
               type="search"
-              aria-label="Search documents"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
               placeholder="Search by document name or description..."
-              value={q}
-              onChange={(event) => setQ(event.target.value)}
+              aria-label="Search documents"
             />
-            {q && (
-              <button
-                type="button"
-                className="search-clear"
-                aria-label="Clear search"
-                onClick={clearSearch}
-              >
-                <CloseIcon />
+            {query && (
+              <button type="button" className="docs2-clear" onClick={clearSearch}>
+                Clear
               </button>
             )}
-            <button type="submit" className="search-submit">
-              Search
-            </button>
+            <button type="submit" className="docs2-search-button">Search</button>
           </form>
 
-          <div className="documents-summary">
-            <strong>{docs.length}</strong>
-            {docs.length === 1 ? ' document' : ' documents'}
-            {loading && <span className="loading-label">Updating...</span>}
+          <div className="docs2-count">
+            <strong>{docs.length}</strong>{' '}
+            {docs.length === 1 ? 'document' : 'documents'}
+            {isLoading && <span className="docs2-updating">Updating...</span>}
           </div>
-        </div>
+        </section>
 
         {docs.length === 0 ? (
-          <div className="documents-empty-state">
-            <div className="empty-icon"><SearchIcon /></div>
+          <section className="docs2-empty">
+            <div className="docs2-empty-mark">—</div>
             <h2>No documents found</h2>
-            <p>Try a different search term or upload a new document.</p>
-            <Link to="/upload" className="empty-action">Upload a document</Link>
-          </div>
+            <p>Try a different search or upload a new document.</p>
+            <Link to="/upload" className="docs2-empty-link">Upload a document</Link>
+          </section>
         ) : (
-          <div className="documents-grid">
+          <section className="docs2-grid">
             {docs.map((document) => {
-              const category = document.category?.name || 'Uncategorized';
-              const size = Number(document.sizeBytes || 0) / 1024 / 1024;
-              const isPublic = document.accessLevel === 'PUBLIC';
+              const sizeInMb = Number(document.sizeBytes || 0) / 1024 / 1024;
+              const access = document.accessLevel || 'PRIVATE';
+              const isPublic = access === 'PUBLIC';
 
               return (
-                <article className="document-card" key={document.id}>
-                  <div className="document-card-topline">
-                    <div className="document-file-icon">
-                      <FileIcon mime={document.mimeType} />
-                    </div>
-                    <span className="file-type-label">
-                      {document.mimeType?.split('/')[1]?.toUpperCase() || 'FILE'}
+                <article className="docs2-card" key={document.id}>
+                  <div className="docs2-card-heading">
+                    <div className="docs2-file-mark">{getFileType(document)}</div>
+                    <span className="docs2-category-label">
+                      {document.category?.name || 'Uncategorized'}
                     </span>
                   </div>
 
-                  <h2 className="document-name" title={document.name}>
+                  <h2 className="docs2-name" title={document.name}>
                     {document.name}
                   </h2>
-
-                  <p className="document-description">
+                  <p className="docs2-description">
                     {document.description || 'No description provided'}
                   </p>
 
-                  <div className="document-meta">
-                    <span>{category}</span>
-                    <span className="meta-dot">·</span>
-                    <span>{size.toFixed(2)} MB</span>
+                  <div className="docs2-meta">
+                    <span>{sizeInMb.toFixed(2)} MB</span>
+                    <span>·</span>
+                    <span>{document.mimeType || 'Unknown type'}</span>
                   </div>
 
-                  <div className="document-card-footer">
-                    <span className={`access-badge ${isPublic ? 'is-public' : 'is-private'}`}>
-                      <span className="badge-dot" />
-                      {document.accessLevel || 'PRIVATE'}
+                  <div className="docs2-card-footer">
+                    <span className={`docs2-badge ${isPublic ? 'docs2-public' : 'docs2-private'}`}>
+                      <span className="docs2-badge-dot" />
+                      {access}
                     </span>
-
-                    <Link className="document-open-link" to={`/documents/${document.id}`}>
-                      <span>Open</span>
-                      <ArrowUpRightIcon />
+                    <Link to={`/documents/${document.id}`} className="docs2-open">
+                      Open <span aria-hidden="true">↗</span>
                     </Link>
                   </div>
                 </article>
               );
             })}
-          </div>
+          </section>
         )}
-      </section>
+      </div>
     </main>
   );
 }
