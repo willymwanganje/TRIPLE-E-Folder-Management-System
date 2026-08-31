@@ -2,16 +2,25 @@ const API_URL =
   import.meta.env.VITE_API_URL ||
   'https://triple-e-folder-management-system.onrender.com/api';
 
-const token = () => localStorage.getItem('tripleE_token');
+const token = () =>
+  localStorage.getItem('tripleE_token');
 
 async function request(
   path,
-  { method = 'GET', body, headers = {} } = {}
+  {
+    method = 'GET',
+    body,
+    headers = {},
+  } = {}
 ) {
   const h = { ...headers };
 
-  if (body && !(body instanceof FormData)) {
-    h['Content-Type'] = 'application/json';
+  if (
+    body &&
+    !(body instanceof FormData)
+  ) {
+    h['Content-Type'] =
+      'application/json';
   }
 
   const t = token();
@@ -20,16 +29,19 @@ async function request(
     h.Authorization = `Bearer ${t}`;
   }
 
-  const response = await fetch(`${API_URL}${path}`, {
-    method,
-    headers: h,
-    body:
-      body instanceof FormData
-        ? body
-        : body
-          ? JSON.stringify(body)
-          : undefined,
-  });
+  const response = await fetch(
+    `${API_URL}${path}`,
+    {
+      method,
+      headers: h,
+      body:
+        body instanceof FormData
+          ? body
+          : body
+            ? JSON.stringify(body)
+            : undefined,
+    }
+  );
 
   let data = null;
 
@@ -39,13 +51,19 @@ async function request(
     // No JSON response
   }
 
-  if (response.status === 401 && path !== '/auth/login') {
-    localStorage.removeItem('tripleE_token');
+  if (
+    response.status === 401 &&
+    path !== '/auth/login'
+  ) {
+    localStorage.removeItem(
+      'tripleE_token'
+    );
   }
 
   if (!response.ok) {
     throw new Error(
-      data?.message || `Request failed (${response.status})`
+      data?.message ||
+        `Request failed (${response.status})`
     );
   }
 
@@ -53,7 +71,10 @@ async function request(
 }
 
 export const api = {
-  baseUrl: API_URL.replace(/\/api$/, ''),
+  baseUrl: API_URL.replace(
+    /\/api$/,
+    ''
+  ),
 
   login: (email, password) =>
     request('/auth/login', {
@@ -61,11 +82,14 @@ export const api = {
       body: { email, password },
     }),
 
-  me: () => request('/auth/me'),
+  me: () =>
+    request('/auth/me'),
 
-  dashboard: () => request('/dashboard'),
+  dashboard: () =>
+    request('/dashboard'),
 
-  profile: () => request('/profile'),
+  profile: () =>
+    request('/profile'),
 
   saveProfile: (data) =>
     request('/profile', {
@@ -85,18 +109,26 @@ export const api = {
       body: data,
     }),
 
-  users: () => request('/users'),
+  users: () =>
+    request('/users'),
 
-  user: (id) => request(`/users/${id}`),
+  user: (id) =>
+    request(`/users/${id}`),
 
   userPermissions: (id) =>
     request(`/users/${id}/permissions`),
 
-  saveUserPermissions: (id, permissions) =>
-    request(`/users/${id}/permissions`, {
-      method: 'PUT',
-      body: { permissions },
-    }),
+  saveUserPermissions: (
+    id,
+    permissions
+  ) =>
+    request(
+      `/users/${id}/permissions`,
+      {
+        method: 'PUT',
+        body: { permissions },
+      }
+    ),
 
   createUser: (data) =>
     request('/users', {
@@ -115,7 +147,12 @@ export const api = {
       method: 'DELETE',
     }),
 
-  categories: () => request('/categories'),
+  /* =========================
+     CATEGORIES
+     ========================= */
+
+  categories: () =>
+    request('/categories'),
 
   createCategory: (data) =>
     request('/categories', {
@@ -133,6 +170,10 @@ export const api = {
     request(`/categories/${id}`, {
       method: 'DELETE',
     }),
+
+  /* =========================
+     FOLDERS
+     ========================= */
 
   folders: (q = '') =>
     request(`/folders${q}`),
@@ -157,6 +198,10 @@ export const api = {
       method: 'DELETE',
     }),
 
+  /* =========================
+     DOCUMENTS
+     ========================= */
+
   documents: (q = '') =>
     request(`/documents${q}`),
 
@@ -179,6 +224,51 @@ export const api = {
     request(`/documents/${id}`, {
       method: 'DELETE',
     }),
+
+  /*
+   * Download file using the logged-in user's JWT.
+   * This returns a Blob so the browser does not
+   * navigate to the file URL.
+   */
+  downloadFile: async (fileUrl) => {
+    const t = token();
+
+    const response = await fetch(
+      fileUrl,
+      {
+        method: 'GET',
+        headers: t
+          ? {
+              Authorization: `Bearer ${t}`,
+            }
+          : {},
+      }
+    );
+
+    if (!response.ok) {
+      let message =
+        'Failed to download the file.';
+
+      try {
+        const data =
+          await response.json();
+
+        if (data?.message) {
+          message = data.message;
+        }
+      } catch {
+        // Response was not JSON
+      }
+
+      throw new Error(message);
+    }
+
+    return response.blob();
+  },
+
+  /* =========================
+     ADMIN
+     ========================= */
 
   roles: () =>
     request('/admin/roles'),

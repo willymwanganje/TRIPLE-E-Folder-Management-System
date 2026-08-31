@@ -1,28 +1,59 @@
 import { useEffect, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import {
+  Link,
+  useNavigate,
+  useParams,
+} from 'react-router-dom';
+
 import Spinner from '../components/Spinner';
 import { api } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 
 function getFileType(mimeType = '') {
-  if (mimeType.startsWith('image/')) return 'image';
-  if (mimeType === 'application/pdf') return 'pdf';
-  if (mimeType.startsWith('video/')) return 'video';
+  if (mimeType.startsWith('image/')) {
+    return 'image';
+  }
+
+  if (mimeType === 'application/pdf') {
+    return 'pdf';
+  }
+
+  if (mimeType.startsWith('video/')) {
+    return 'video';
+  }
+
   return 'other';
 }
 
 function formatSize(bytes) {
   if (!bytes) return '—';
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / 1024 / 1024).toFixed(2)} MB`;
+
+  if (bytes < 1024) {
+    return `${bytes} B`;
+  }
+
+  if (bytes < 1024 * 1024) {
+    return `${(bytes / 1024).toFixed(1)} KB`;
+  }
+
+  return `${(
+    bytes /
+    1024 /
+    1024
+  ).toFixed(2)} MB`;
 }
 
 function formatDate(str) {
   if (!str) return '—';
 
-  return new Date(str).toLocaleString('en-GB', {
+  const date = new Date(str);
+
+  if (Number.isNaN(date.getTime())) {
+    return '—';
+  }
+
+  return date.toLocaleString('en-GB', {
     day: '2-digit',
     month: 'short',
     year: 'numeric',
@@ -33,91 +64,225 @@ function formatDate(str) {
 
 export default function DocumentDetailsPage() {
   const { id } = useParams();
-  const nav = useNavigate();
+  const navigate = useNavigate();
 
   const { user } = useAuth();
   const { push } = useToast();
 
-  const [d, setD] = useState(null);
-  const [deleting, setDeleting] = useState(false);
+  const [document, setDocument] =
+    useState(null);
+
+  const [deleting, setDeleting] =
+    useState(false);
+
+  const [downloading, setDownloading] =
+    useState(false);
+
+  const [editing, setEditing] =
+    useState(false);
+
+  const [saving, setSaving] =
+    useState(false);
+
+  const [form, setForm] = useState({
+    name: '',
+    description: '',
+    accessLevel: 'PRIVATE',
+  });
 
   useEffect(() => {
     let mounted = true;
 
     api.document(id)
-      .then(data => {
-        if (mounted) setD(data);
+      .then((data) => {
+        if (!mounted) return;
+
+        setDocument(data);
+
+        setForm({
+          name: data.name || '',
+          description:
+            data.description || '',
+          accessLevel:
+            data.accessLevel || 'PRIVATE',
+        });
       })
-      .catch(e => {
-        if (mounted) push(e.message, 'error');
+      .catch((error) => {
+        if (mounted) {
+          push(error.message, 'error');
+        }
       });
 
     return () => {
       mounted = false;
     };
-  }, [id, push]);
+  }, [id]);
 
-  if (!d) {
+  if (!document) {
     return <Spinner />;
   }
 
-  const fileUrl = d.fileUrl?.startsWith('http')
-    ? d.fileUrl
-    : `${api.baseUrl}${d.fileUrl}`;
+  const fileUrl = document.fileUrl?.startsWith(
+    'http'
+  )
+    ? document.fileUrl
+    : `${api.baseUrl}${document.fileUrl}`;
 
-  const fileType = getFileType(d.mimeType);
+  const fileType = getFileType(
+    document.mimeType
+  );
 
-  const canManage =
+  const isOwner =
+    document.uploadedById === user?.id;
+
+  const canEdit =
     user?.isSuperAdmin ||
-    user?.role?.name === 'Admin' ||
-    d.uploadedById === user?.id;
+    (
+      isOwner &&
+      user?.permissions?.includes(
+        'document.update'
+      )
+    );
+
+  const canDelete =
+    user?.isSuperAdmin ||
+    (
+      isOwner &&
+      user?.permissions?.includes(
+        'document.delete'
+      )
+    );
+
+  const canDownload =
+    user?.isSuperAdmin ||
+    user?.permissions?.includes(
+      'document.download'
+    );
+
+  async function download() {
+    if (!canDownload) {
+      push(
+        'You do not have permission to download this file.',
+        'error'
+      );
+      return;
+    }
+
+    setDownloading(true);
+
+    try {
+      const blob =
+        await api.downloadFile(fileUrl);
+
+      const blobUrl =
+        window.URL.createObjectURL(blob);
+
+      const anchor =
+        document.createElement('a');
+
+      anchor.href = blobUrl;
+      anchor.download =
+        document.name || 'document';
+
+      anchor.style.display = 'none';
+
+      document.body.appendChild(anchor);
+
+      anchor.click();
+
+      anchor.remove();
+
+      setTimeout(() => {
+        window.URL.revokeObjectURL(blobUrl);
+      }, 1000);
+    } catch (error) {
+      console.error(
+        'Download error:',
+        error
+      );
+
+      push(
+        error.message ||
+          'Unable to download the file.',
+        'error'
+      );
+    } finally {
+      setDownloading(false);
+    }
+  }
+
+  async function saveChanges(event) {
+    event.preventDefault();
+
+    if (!form.name.trim()) {
+      push(
+        'Document name is required.',
+        'error'
+      );
+      return;
+    }
+
+    setSaving(true);
+
+    try {
+      const updated =
+        await api.updateDocument(id, {
+          name: form.name.trim(),
+          description:
+            form.description.trim(),
+          accessLevel: form.accessLevel,
+        });
+
+      setDocument(
+        updated || {
+          ...document,
+          ...form,
+        }
+      );
+
+      setEditing(false);
+
+      push('Document updated.');
+    } catch (error) {
+      push(error.message, 'error');
+    } finally {
+      setSaving(false);
+    }
+  }
 
   async function del() {
-    if (!confirm('Delete this document permanently?')) return;
+    if (!canDelete) {
+      push(
+        'You do not have permission to delete this file.',
+        'error'
+      );
+      return;
+    }
+
+    if (
+      !window.confirm(
+        'Delete this document permanently?'
+      )
+    ) {
+      return;
+    }
 
     setDeleting(true);
 
     try {
       await api.deleteDocument(id);
+
       push('Document deleted.');
-      nav('/documents');
-    } catch (e) {
-      push(e.message, 'error');
+
+      navigate('/documents');
+    } catch (error) {
+      push(error.message, 'error');
       setDeleting(false);
     }
   }
 
-  async function download() {
-  try {
-    const response = await fetch(fileUrl);
-
-    if (!response.ok) {
-      throw new Error('Failed to download the file.');
-    }
-
-    const blob = await response.blob();
-
-    const blobUrl = window.URL.createObjectURL(blob);
-
-    const a = document.createElement('a');
-    a.href = blobUrl;
-    a.download = d.name || 'document';
-
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-
-    window.URL.revokeObjectURL(blobUrl);
-  } catch (error) {
-    console.error('Download error:', error);
-    push('Unable to download the file. Please try again.', 'error');
-  }
-}
   return (
     <>
-      {/* =========================================================
-          RESPONSIVE STYLES
-          ========================================================= */}
       <style>{`
         .document-details-page {
           width: 100%;
@@ -156,12 +321,11 @@ export default function DocumentDetailsPage() {
           grid-template-columns: minmax(0, 1fr) 320px;
           gap: 20px;
           align-items: start;
-          width: 100%;
         }
 
-        .preview-panel {
-          min-width: 0;
-          width: 100%;
+        .preview-panel,
+        .info-card,
+        .edit-card {
           background: var(--color-surface, #fff);
           border: 1px solid var(--color-border, #e5e7eb);
           border-radius: 12px;
@@ -180,8 +344,6 @@ export default function DocumentDetailsPage() {
 
         .preview-area {
           min-height: 320px;
-          width: 100%;
-          box-sizing: border-box;
           display: flex;
           align-items: center;
           justify-content: center;
@@ -192,8 +354,6 @@ export default function DocumentDetailsPage() {
 
         .preview-image {
           display: block;
-          width: auto;
-          height: auto;
           max-width: 100%;
           max-height: 480px;
           border-radius: 8px;
@@ -210,8 +370,6 @@ export default function DocumentDetailsPage() {
 
         .preview-video {
           display: block;
-          width: auto;
-          height: auto;
           max-width: 100%;
           max-height: 480px;
           border-radius: 8px;
@@ -223,31 +381,18 @@ export default function DocumentDetailsPage() {
           color: var(--color-text-subtle, #6b7280);
         }
 
-        .preview-empty-icon {
-          font-size: 48px;
-          margin-bottom: 12px;
-        }
-
-        .preview-empty-text {
-          font-size: 14px;
-        }
-
-        .preview-empty-type {
-          font-size: 12px;
-          margin-top: 4px;
-          word-break: break-word;
-        }
-
         .action-buttons {
           padding: 14px 18px;
           border-top: 1px solid var(--color-border, #e5e7eb);
           display: flex;
           gap: 10px;
+          flex-wrap: wrap;
         }
 
         .download-button {
           flex: 1;
-          padding: 10px 0;
+          min-width: 150px;
+          padding: 10px 14px;
           border-radius: 8px;
           border: none;
           background: var(--color-primary, #0f766e);
@@ -255,10 +400,11 @@ export default function DocumentDetailsPage() {
           font-weight: 600;
           font-size: 14px;
           cursor: pointer;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          gap: 6px;
+        }
+
+        .download-button:disabled {
+          opacity: .6;
+          cursor: not-allowed;
         }
 
         .delete-button {
@@ -268,29 +414,31 @@ export default function DocumentDetailsPage() {
           background: #fee2e2;
           color: #b91c1c;
           font-weight: 600;
-          font-size: 14px;
           cursor: pointer;
         }
 
         .delete-button:disabled {
           cursor: not-allowed;
-          opacity: 0.7;
+          opacity: .7;
+        }
+
+        .edit-button {
+          padding: 10px 20px;
+          border-radius: 8px;
+          border: 1px solid #dbeafe;
+          background: #eff6ff;
+          color: #1d4ed8;
+          font-weight: 600;
+          cursor: pointer;
         }
 
         .info-panel {
           display: flex;
           flex-direction: column;
           gap: 16px;
-          min-width: 0;
-          width: 100%;
         }
 
         .info-card {
-          width: 100%;
-          box-sizing: border-box;
-          background: var(--color-surface, #fff);
-          border: 1px solid var(--color-border, #e5e7eb);
-          border-radius: 12px;
           padding: 18px;
         }
 
@@ -306,14 +454,6 @@ export default function DocumentDetailsPage() {
           font-size: 14px;
           line-height: 1.6;
           word-break: break-word;
-          overflow-wrap: anywhere;
-        }
-
-        .details-label {
-          font-size: 12px;
-          font-weight: 600;
-          color: var(--color-text-subtle, #6b7280);
-          margin-bottom: 12px;
         }
 
         .detail-row {
@@ -321,8 +461,8 @@ export default function DocumentDetailsPage() {
           justify-content: space-between;
           align-items: flex-start;
           gap: 12px;
-          padding: 7px 0;
-          border-bottom: 1px solid var(--color-border, #f3f4f6);
+          padding: 8px 0;
+          border-bottom: 1px solid #f3f4f6;
           font-size: 13px;
         }
 
@@ -331,7 +471,7 @@ export default function DocumentDetailsPage() {
         }
 
         .detail-label {
-          color: var(--color-text-subtle, #6b7280);
+          color: #6b7280;
           flex-shrink: 0;
         }
 
@@ -340,65 +480,52 @@ export default function DocumentDetailsPage() {
           text-align: right;
           max-width: 65%;
           word-break: break-word;
-          overflow-wrap: anywhere;
         }
 
-        /*
-         * TABLET
-         */
+        .edit-card {
+          padding: 18px;
+          margin-bottom: 16px;
+        }
+
+        .edit-form {
+          display: grid;
+          gap: 12px;
+        }
+
+        .edit-form input,
+        .edit-form textarea,
+        .edit-form select {
+          width: 100%;
+          box-sizing: border-box;
+          padding: 10px 12px;
+          border: 1px solid #d1d5db;
+          border-radius: 8px;
+          font: inherit;
+        }
+
+        .edit-actions {
+          display: flex;
+          gap: 8px;
+        }
+
         @media (max-width: 800px) {
           .document-content {
             grid-template-columns: 1fr;
           }
-
-          .info-panel {
-            width: 100%;
-          }
-
-          .preview-area {
-            min-height: 280px;
-          }
-
-          .preview-image {
-            max-height: 520px;
-          }
         }
 
-        /*
-         * MOBILE
-         */
         @media (max-width: 600px) {
           .document-details-page {
             padding: 18px 14px 30px;
-          }
-
-          .document-header {
-            margin-bottom: 18px;
           }
 
           .document-title {
             font-size: 21px;
           }
 
-          .document-subtitle {
-            font-size: 13px;
-          }
-
           .document-content {
             display: flex;
             flex-direction: column;
-            gap: 16px;
-          }
-
-          /*
-           * Preview FIRST on mobile.
-           */
-          .preview-panel {
-            order: 1;
-          }
-
-          .info-panel {
-            order: 2;
           }
 
           .preview-area {
@@ -407,8 +534,6 @@ export default function DocumentDetailsPage() {
           }
 
           .preview-image {
-            width: auto;
-            max-width: 100%;
             max-height: 420px;
           }
 
@@ -417,20 +542,7 @@ export default function DocumentDetailsPage() {
           }
 
           .preview-video {
-            max-width: 100%;
             max-height: 420px;
-          }
-
-          .preview-title {
-            padding: 12px 14px;
-          }
-
-          .action-buttons {
-            padding: 12px 14px;
-          }
-
-          .info-card {
-            padding: 15px;
           }
 
           .detail-row {
@@ -442,29 +554,10 @@ export default function DocumentDetailsPage() {
           }
         }
 
-        /*
-         * VERY SMALL PHONES
-         */
         @media (max-width: 380px) {
           .document-details-page {
             padding-left: 10px;
             padding-right: 10px;
-          }
-
-          .document-title {
-            font-size: 19px;
-          }
-
-          .preview-area {
-            min-height: 220px;
-          }
-
-          .preview-image {
-            max-height: 350px;
-          }
-
-          .preview-pdf {
-            height: 400px;
           }
 
           .action-buttons {
@@ -472,7 +565,8 @@ export default function DocumentDetailsPage() {
           }
 
           .download-button,
-          .delete-button {
+          .delete-button,
+          .edit-button {
             width: 100%;
           }
 
@@ -489,39 +583,41 @@ export default function DocumentDetailsPage() {
       `}</style>
 
       <div className="document-details-page">
-
-        {/* Back link */}
         <Link
-          to="/documents"
+          to={
+            document.folderId
+              ? `/documents?folder=${encodeURIComponent(
+                  document.folderId
+                )}`
+              : '/documents'
+          }
           style={{
             display: 'inline-flex',
-            alignItems: 'center',
-            gap: 6,
-            color: 'var(--color-text-subtle, #6b7280)',
+            marginBottom: 20,
+            color: '#64748b',
             fontSize: 14,
             textDecoration: 'none',
-            marginBottom: 20,
           }}
         >
-          ← All Documents
+          ← Back
         </Link>
 
-        {/* =========================================================
-            HEADER
-            ========================================================= */}
         <div className="document-header">
-
           <div style={{ minWidth: 0 }}>
             <h1 className="document-title">
-              {d.name}
+              {document.name}
             </h1>
 
             <div className="document-subtitle">
-              {d.category?.name || 'Uncategorized'}
+              {document.category?.name ||
+                'Uncategorized'}
               {' · '}
-              {d.folder?.name || 'Root'}
+              {document.folder?.name ||
+                'Root'}
               {' · '}
-              {formatSize(d.sizeBytes)}
+              {formatSize(
+                document.sizeBytes
+              )}
             </div>
           </div>
 
@@ -532,59 +628,146 @@ export default function DocumentDetailsPage() {
               fontSize: 12,
               fontWeight: 600,
               background:
-                d.accessLevel === 'PUBLIC'
+                document.accessLevel ===
+                'PUBLIC'
                   ? '#d1fae5'
                   : '#ccfbf1',
               color:
-                d.accessLevel === 'PUBLIC'
+                document.accessLevel ===
+                'PUBLIC'
                   ? '#065f46'
                   : '#0f766e',
-              flexShrink: 0,
             }}
           >
-            {d.accessLevel}
+            {document.accessLevel}
           </span>
-
         </div>
 
-        {/* =========================================================
-            CONTENT
-            ========================================================= */}
+        {/* Edit */}
+        {editing && canEdit && (
+          <section className="edit-card">
+            <h3
+              style={{
+                marginTop: 0,
+              }}
+            >
+              Edit document
+            </h3>
+
+            <form
+              className="edit-form"
+              onSubmit={saveChanges}
+            >
+              <input
+                value={form.name}
+                onChange={(event) =>
+                  setForm({
+                    ...form,
+                    name: event.target.value,
+                  })
+                }
+                placeholder="Document name"
+              />
+
+              <textarea
+                rows={4}
+                value={form.description}
+                onChange={(event) =>
+                  setForm({
+                    ...form,
+                    description:
+                      event.target.value,
+                  })
+                }
+                placeholder="Description"
+              />
+
+              <select
+                value={form.accessLevel}
+                onChange={(event) =>
+                  setForm({
+                    ...form,
+                    accessLevel:
+                      event.target.value,
+                  })
+                }
+              >
+                <option value="PUBLIC">
+                  PUBLIC
+                </option>
+                <option value="RESTRICTED">
+                  RESTRICTED
+                </option>
+                <option value="PRIVATE">
+                  PRIVATE
+                </option>
+              </select>
+
+              <div className="edit-actions">
+                <button
+                  type="submit"
+                  disabled={saving}
+                  style={{
+                    padding: '10px 16px',
+                    border: 'none',
+                    borderRadius: 8,
+                    background: '#0f766e',
+                    color: '#fff',
+                    fontWeight: 600,
+                  }}
+                >
+                  {saving
+                    ? 'Saving...'
+                    : 'Save changes'}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    setEditing(false)
+                  }
+                  style={{
+                    padding: '10px 16px',
+                    border: '1px solid #d1d5db',
+                    borderRadius: 8,
+                    background: '#fff',
+                  }}
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </section>
+        )}
+
         <div className="document-content">
-
-          {/* =======================================================
-              PREVIEW PANEL
-              ======================================================= */}
+          {/* Preview */}
           <div className="preview-panel">
-
             <div className="preview-title">
               Preview
             </div>
 
             <div className="preview-area">
-
-              {/* IMAGE */}
               {fileType === 'image' && (
                 <img
                   src={fileUrl}
-                  alt={d.name}
+                  alt={document.name}
                   className="preview-image"
-                  onError={e => {
-                    e.currentTarget.style.display = 'none';
+                  onError={(event) => {
+                    event.currentTarget.style.display =
+                      'none';
                   }}
                 />
               )}
 
-              {/* PDF */}
               {fileType === 'pdf' && (
                 <iframe
                   src={fileUrl}
-                  title={d.name}
+                  title={document.name}
                   className="preview-pdf"
                 />
               )}
 
-              {/* VIDEO */}
               {fileType === 'video' && (
                 <video
                   src={fileUrl}
@@ -593,106 +776,141 @@ export default function DocumentDetailsPage() {
                 />
               )}
 
-              {/* OTHER */}
               {fileType === 'other' && (
                 <div className="preview-empty">
-
-                  <div className="preview-empty-icon">
+                  <div
+                    style={{
+                      fontSize: 48,
+                      marginBottom: 12,
+                    }}
+                  >
                     📄
                   </div>
 
-                  <div className="preview-empty-text">
-                    Preview not available for this file type.
+                  <div>
+                    Preview not available for
+                    this file type.
                   </div>
 
-                  <div className="preview-empty-type">
-                    {d.mimeType}
+                  <div
+                    style={{
+                      fontSize: 12,
+                      marginTop: 4,
+                    }}
+                  >
+                    {document.mimeType}
                   </div>
-
                 </div>
               )}
-
             </div>
 
-            {/* =====================================================
-                ACTION BUTTONS
-                ===================================================== */}
             <div className="action-buttons">
-
-              <button
-                onClick={download}
-                className="download-button"
-              >
-                ⬇ Download
-              </button>
-
-              {canManage && (
+              {canDownload && (
                 <button
+                  type="button"
+                  onClick={download}
+                  disabled={downloading}
+                  className="download-button"
+                >
+                  {downloading
+                    ? 'Downloading...'
+                    : '⬇ Download'}
+                </button>
+              )}
+
+              {canEdit && (
+                <button
+                  type="button"
+                  className="edit-button"
+                  onClick={() =>
+                    setEditing((value) => !value)
+                  }
+                >
+                  {editing
+                    ? 'Close edit'
+                    : 'Edit'}
+                </button>
+              )}
+
+              {canDelete && (
+                <button
+                  type="button"
                   onClick={del}
                   disabled={deleting}
                   className="delete-button"
                 >
-                  {deleting ? '...' : 'Delete'}
+                  {deleting
+                    ? 'Deleting...'
+                    : 'Delete'}
                 </button>
               )}
-
             </div>
-
           </div>
 
-          {/* =======================================================
-              INFO PANEL
-              ======================================================= */}
+          {/* Information */}
           <div className="info-panel">
-
-            {/* DESCRIPTION */}
             <div className="info-card">
-
               <div className="info-label">
                 DESCRIPTION
               </div>
 
               <p className="description-text">
-                {d.description || 'No description provided.'}
+                {document.description ||
+                  'No description provided.'}
               </p>
-
             </div>
 
-            {/* FILE DETAILS */}
             <div className="info-card">
-
-              <div className="details-label">
+              <div
+                className="info-label"
+                style={{
+                  marginBottom: 12,
+                }}
+              >
                 FILE DETAILS
               </div>
 
               {[
                 {
                   label: 'Uploaded by',
-                  value: d.uploadedBy?.fullName || '—',
+                  value:
+                    document.uploadedBy
+                      ?.fullName || '—',
                 },
                 {
                   label: 'Date',
-                  value: formatDate(d.createdAt),
+                  value: formatDate(
+                    document.createdAt
+                  ),
                 },
                 {
                   label: 'Size',
-                  value: formatSize(d.sizeBytes),
+                  value: formatSize(
+                    document.sizeBytes
+                  ),
                 },
                 {
                   label: 'Type',
-                  value: d.mimeType || '—',
+                  value:
+                    document.mimeType || '—',
                 },
                 {
                   label: 'Category',
-                  value: d.category?.name || '—',
+                  value:
+                    document.category?.name ||
+                    '—',
                 },
                 {
                   label: 'Folder',
-                  value: d.folder?.name || 'Root',
+                  value:
+                    document.folder?.name ||
+                    'Root',
                 },
                 {
                   label: 'Access',
-                  value: d.accessLevel || '—',
+                  value:
+                    document.accessLevel ||
+                    '—',
                 },
               ].map(({ label, value }) => (
                 <div
@@ -708,13 +926,9 @@ export default function DocumentDetailsPage() {
                   </span>
                 </div>
               ))}
-
             </div>
-
           </div>
-
         </div>
-
       </div>
     </>
   );
