@@ -69,26 +69,25 @@ export default function DocumentDetailsPage() {
   const { user } = useAuth();
   const { push } = useToast();
 
-  const [document, setDocument] =
-    useState(null);
+  const [documentData, setDocumentData] = useState(null);
 
-  const [deleting, setDeleting] =
-    useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [downloading, setDownloading] = useState(false);
 
-  const [downloading, setDownloading] =
-    useState(false);
-
-  const [editing, setEditing] =
-    useState(false);
-
-  const [saving, setSaving] =
-    useState(false);
+  const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   const [form, setForm] = useState({
     name: '',
     description: '',
     accessLevel: 'PRIVATE',
   });
+
+  /*
+   * ============================================================
+   * LOAD DOCUMENT
+   * ============================================================
+   */
 
   useEffect(() => {
     let mounted = true;
@@ -97,108 +96,259 @@ export default function DocumentDetailsPage() {
       .then((data) => {
         if (!mounted) return;
 
-        setDocument(data);
+        setDocumentData(data);
 
         setForm({
           name: data.name || '',
-          description:
-            data.description || '',
-          accessLevel:
-            data.accessLevel || 'PRIVATE',
+          description: data.description || '',
+          accessLevel: data.accessLevel || 'PRIVATE',
         });
       })
       .catch((error) => {
         if (mounted) {
-          push(error.message, 'error');
+          push(
+            error.message || 'Failed to load document.',
+            'error'
+          );
         }
       });
 
     return () => {
       mounted = false;
     };
-  }, [id]);
+  }, [id, push]);
 
-  if (!document) {
+  /*
+   * ============================================================
+   * LOADING
+   * ============================================================
+   */
+
+  if (!documentData) {
     return <Spinner />;
   }
 
-  const fileUrl = document.fileUrl?.startsWith(
-    'http'
-  )
-    ? document.fileUrl
-    : `${api.baseUrl}${document.fileUrl}`;
+  /*
+   * ============================================================
+   * FILE URL
+   * ============================================================
+   */
+
+  const fileUrl = documentData.fileUrl?.startsWith('http')
+    ? documentData.fileUrl
+    : `${api.baseUrl}${documentData.fileUrl}`;
 
   const fileType = getFileType(
-    document.mimeType
+    documentData.mimeType || ''
   );
 
+  /*
+   * ============================================================
+   * PERMISSIONS
+   * ============================================================
+   */
+
   const isOwner =
-    document.uploadedById === user?.id;
+    documentData.uploadedById === user?.id;
+
+  const isAdmin =
+    user?.role?.name === 'Admin';
+
+  const isSuperAdmin =
+    user?.isSuperAdmin === true;
+
+  /*
+   * OWNER CAN EDIT ONLY IF HE HAS PERMISSION.
+   *
+   * ADMIN / SUPER ADMIN CAN MANAGE.
+   */
 
   const canEdit =
-    user?.isSuperAdmin ||
+    isSuperAdmin ||
+    isAdmin ||
     (
       isOwner &&
-      user?.permissions?.includes(
-        'document.update'
-      )
+      user?.permissions?.includes('document.update')
     );
 
   const canDelete =
-    user?.isSuperAdmin ||
+    isSuperAdmin ||
+    isAdmin ||
     (
       isOwner &&
-      user?.permissions?.includes(
-        'document.delete'
-      )
+      user?.permissions?.includes('document.delete')
     );
+
+  /*
+   * DOWNLOAD IS CONTROLLED BY PERMISSION.
+   */
 
   const canDownload =
-    user?.isSuperAdmin ||
-    user?.permissions?.includes(
-      'document.download'
-    );
+    isSuperAdmin ||
+    user?.permissions?.includes('document.download');
 
-async function download() {
-  try {
-    const response = await fetch(fileUrl, {
-      method: 'GET',
-      headers: {
-        Authorization: `Bearer ${localStorage.getItem('tripleE_token')}`,
-      },
-    });
+  /*
+   * ============================================================
+   * DOWNLOAD
+   * ============================================================
+   *
+   * IMPORTANT:
+   * We use window.document.createElement()
+   * because "document" is also the name of our data variable.
+   */
 
-    if (!response.ok) {
-      throw new Error(`Download failed (${response.status})`);
+  async function download() {
+    if (!canDownload) {
+      push(
+        'You do not have permission to download this file.',
+        'error'
+      );
+      return;
     }
 
-    const blob = await response.blob();
+    if (downloading) {
+      return;
+    }
 
-    const blobUrl = window.URL.createObjectURL(blob);
+    setDownloading(true);
 
-    const link = document.createElement('a');
-    link.href = blobUrl;
-    link.download = d.name || 'document';
+    try {
+      const token = localStorage.getItem(
+        'tripleE_token'
+      );
 
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
+      const headers = {};
 
-    window.URL.revokeObjectURL(blobUrl);
-  } catch (error) {
-    console.error('Download error:', error);
-    push(
-      error.message || 'Unable to download the file.',
-      'error'
-    );
+      if (token) {
+        headers.Authorization = `Bearer ${token}`;
+      }
+
+      const response = await fetch(fileUrl, {
+        method: 'GET',
+        headers,
+      });
+
+      if (!response.ok) {
+        let message = `Download failed (${response.status})`;
+
+        try {
+          const data = await response.json();
+
+          if (data?.message) {
+            message = data.message;
+          }
+        } catch {
+          // Response was not JSON.
+        }
+
+        throw new Error(message);
+      }
+
+      const blob = await response.blob();
+
+      if (!blob || blob.size === 0) {
+        throw new Error(
+          'The downloaded file is empty.'
+        );
+      }
+
+      /*
+       * Create temporary object URL.
+       */
+
+      const blobUrl =
+        window.URL.createObjectURL(blob);
+
+      /*
+       * IMPORTANT:
+       * Use window.document.createElement()
+       * NOT document.createElement()
+       */
+
+      const downloadLink =
+        window.document.createElement('a');
+
+      downloadLink.href = blobUrl;
+
+      /*
+       * Use original file name.
+       */
+
+      downloadLink.download =
+        documentData.name || 'document';
+
+      /*
+       * Make it invisible.
+       */
+
+      downloadLink.style.display = 'none';
+
+      window.document.body.appendChild(
+        downloadLink
+      );
+
+      /*
+       * Trigger browser download.
+       */
+
+      downloadLink.click();
+
+      /*
+       * Remove temporary element.
+       */
+
+      window.document.body.removeChild(
+        downloadLink
+      );
+
+      /*
+       * Release memory.
+       *
+       * Delay slightly so browsers don't cancel
+       * the download before it starts.
+       */
+
+      window.setTimeout(() => {
+        window.URL.revokeObjectURL(blobUrl);
+      }, 1000);
+
+      push('Download started.');
+    } catch (error) {
+      console.error(
+        'Download error:',
+        error
+      );
+
+      push(
+        error.message ||
+          'Unable to download the file. Please try again.',
+        'error'
+      );
+    } finally {
+      setDownloading(false);
+    }
   }
-}
 
+  /*
+   * ============================================================
+   * SAVE DOCUMENT
+   * ============================================================
+   */
 
   async function saveChanges(event) {
     event.preventDefault();
 
-    if (!form.name.trim()) {
+    if (!canEdit) {
+      push(
+        'You do not have permission to edit this document.',
+        'error'
+      );
+      return;
+    }
+
+    const cleanName = form.name.trim();
+
+    if (!cleanName) {
       push(
         'Document name is required.',
         'error'
@@ -211,28 +361,61 @@ async function download() {
     try {
       const updated =
         await api.updateDocument(id, {
-          name: form.name.trim(),
+          name: cleanName,
           description:
             form.description.trim(),
-          accessLevel: form.accessLevel,
+          accessLevel:
+            form.accessLevel,
         });
 
-      setDocument(
-        updated || {
-          ...document,
-          ...form,
-        }
-      );
+      /*
+       * Backend may return updated document.
+       */
+
+      if (updated) {
+        setDocumentData(updated);
+
+        setForm({
+          name: updated.name || '',
+          description:
+            updated.description || '',
+          accessLevel:
+            updated.accessLevel || 'PRIVATE',
+        });
+      } else {
+        /*
+         * Fallback if backend returns no data.
+         */
+
+        setDocumentData((previous) => ({
+          ...previous,
+          name: cleanName,
+          description:
+            form.description.trim(),
+          accessLevel:
+            form.accessLevel,
+        }));
+      }
 
       setEditing(false);
 
       push('Document updated.');
     } catch (error) {
-      push(error.message, 'error');
+      push(
+        error.message ||
+          'Failed to update document.',
+        'error'
+      );
     } finally {
       setSaving(false);
     }
   }
+
+  /*
+   * ============================================================
+   * DELETE DOCUMENT
+   * ============================================================
+   */
 
   async function del() {
     if (!canDelete) {
@@ -243,11 +426,12 @@ async function download() {
       return;
     }
 
-    if (
-      !window.confirm(
+    const confirmed =
+      window.confirm(
         'Delete this document permanently?'
-      )
-    ) {
+      );
+
+    if (!confirmed) {
       return;
     }
 
@@ -260,10 +444,21 @@ async function download() {
 
       navigate('/documents');
     } catch (error) {
-      push(error.message, 'error');
+      push(
+        error.message ||
+          'Failed to delete document.',
+        'error'
+      );
+
       setDeleting(false);
     }
   }
+
+  /*
+   * ============================================================
+   * RENDER
+   * ============================================================
+   */
 
   return (
     <>
@@ -365,6 +560,17 @@ async function download() {
           color: var(--color-text-subtle, #6b7280);
         }
 
+        .preview-empty-icon {
+          font-size: 48px;
+          margin-bottom: 12px;
+        }
+
+        .preview-empty-type {
+          font-size: 12px;
+          margin-top: 4px;
+          word-break: break-word;
+        }
+
         .action-buttons {
           padding: 14px 18px;
           border-top: 1px solid var(--color-border, #e5e7eb);
@@ -386,6 +592,10 @@ async function download() {
           cursor: pointer;
         }
 
+        .download-button:hover {
+          opacity: .92;
+        }
+
         .download-button:disabled {
           opacity: .6;
           cursor: not-allowed;
@@ -399,6 +609,10 @@ async function download() {
           color: #b91c1c;
           font-weight: 600;
           cursor: pointer;
+        }
+
+        .delete-button:hover {
+          background: #fecaca;
         }
 
         .delete-button:disabled {
@@ -416,10 +630,15 @@ async function download() {
           cursor: pointer;
         }
 
+        .edit-button:hover {
+          background: #dbeafe;
+        }
+
         .info-panel {
           display: flex;
           flex-direction: column;
           gap: 16px;
+          min-width: 0;
         }
 
         .info-card {
@@ -438,6 +657,7 @@ async function download() {
           font-size: 14px;
           line-height: 1.6;
           word-break: break-word;
+          overflow-wrap: anywhere;
         }
 
         .detail-row {
@@ -464,6 +684,7 @@ async function download() {
           text-align: right;
           max-width: 65%;
           word-break: break-word;
+          overflow-wrap: anywhere;
         }
 
         .edit-card {
@@ -485,11 +706,48 @@ async function download() {
           border: 1px solid #d1d5db;
           border-radius: 8px;
           font: inherit;
+          background: #fff;
+        }
+
+        .edit-form textarea {
+          resize: vertical;
+        }
+
+        .edit-form input:focus,
+        .edit-form textarea:focus,
+        .edit-form select:focus {
+          outline: none;
+          border-color: #0f766e;
+          box-shadow: 0 0 0 3px rgba(15, 118, 110, .1);
         }
 
         .edit-actions {
           display: flex;
           gap: 8px;
+          flex-wrap: wrap;
+        }
+
+        .save-button {
+          padding: 10px 16px;
+          border: none;
+          border-radius: 8px;
+          background: #0f766e;
+          color: #fff;
+          font-weight: 600;
+          cursor: pointer;
+        }
+
+        .save-button:disabled {
+          opacity: .6;
+          cursor: not-allowed;
+        }
+
+        .cancel-button {
+          padding: 10px 16px;
+          border: 1px solid #d1d5db;
+          border-radius: 8px;
+          background: #fff;
+          cursor: pointer;
         }
 
         @media (max-width: 800px) {
@@ -503,13 +761,22 @@ async function download() {
             padding: 18px 14px 30px;
           }
 
+          .document-header {
+            margin-bottom: 18px;
+          }
+
           .document-title {
             font-size: 21px;
+          }
+
+          .document-subtitle {
+            font-size: 13px;
           }
 
           .document-content {
             display: flex;
             flex-direction: column;
+            gap: 16px;
           }
 
           .preview-area {
@@ -563,20 +830,36 @@ async function download() {
             max-width: 100%;
             text-align: left;
           }
+
+          .edit-actions {
+            flex-direction: column;
+          }
+
+          .save-button,
+          .cancel-button {
+            width: 100%;
+          }
         }
       `}</style>
 
       <div className="document-details-page">
+
+        {/* ======================================================
+            BACK
+            ====================================================== */}
+
         <Link
           to={
-            document.folderId
+            documentData.folderId
               ? `/documents?folder=${encodeURIComponent(
-                  document.folderId
+                  documentData.folderId
                 )}`
               : '/documents'
           }
           style={{
             display: 'inline-flex',
+            alignItems: 'center',
+            gap: 6,
             marginBottom: 20,
             color: '#64748b',
             fontSize: 14,
@@ -586,23 +869,34 @@ async function download() {
           ← Back
         </Link>
 
+        {/* ======================================================
+            HEADER
+            ====================================================== */}
+
         <div className="document-header">
+
           <div style={{ minWidth: 0 }}>
+
             <h1 className="document-title">
-              {document.name}
+              {documentData.name}
             </h1>
 
             <div className="document-subtitle">
-              {document.category?.name ||
+              {documentData.category?.name ||
                 'Uncategorized'}
+
               {' · '}
-              {document.folder?.name ||
+
+              {documentData.folder?.name ||
                 'Root'}
+
               {' · '}
+
               {formatSize(
-                document.sizeBytes
+                documentData.sizeBytes
               )}
             </div>
+
           </div>
 
           <span
@@ -612,29 +906,32 @@ async function download() {
               fontSize: 12,
               fontWeight: 600,
               background:
-                document.accessLevel ===
+                documentData.accessLevel ===
                 'PUBLIC'
                   ? '#d1fae5'
                   : '#ccfbf1',
               color:
-                document.accessLevel ===
+                documentData.accessLevel ===
                 'PUBLIC'
                   ? '#065f46'
                   : '#0f766e',
+              flexShrink: 0,
             }}
           >
-            {document.accessLevel}
+            {documentData.accessLevel}
           </span>
+
         </div>
 
-        {/* Edit */}
+        {/* ======================================================
+            EDIT
+            ====================================================== */}
+
         {editing && canEdit && (
+
           <section className="edit-card">
-            <h3
-              style={{
-                marginTop: 0,
-              }}
-            >
+
+            <h3 style={{ marginTop: 0 }}>
               Edit document
             </h3>
 
@@ -642,6 +939,7 @@ async function download() {
               className="edit-form"
               onSubmit={saveChanges}
             >
+
               <input
                 value={form.name}
                 onChange={(event) =>
@@ -676,29 +974,27 @@ async function download() {
                   })
                 }
               >
+
                 <option value="PUBLIC">
                   PUBLIC
                 </option>
+
                 <option value="RESTRICTED">
                   RESTRICTED
                 </option>
+
                 <option value="PRIVATE">
                   PRIVATE
                 </option>
+
               </select>
 
               <div className="edit-actions">
+
                 <button
                   type="submit"
                   disabled={saving}
-                  style={{
-                    padding: '10px 16px',
-                    border: 'none',
-                    borderRadius: 8,
-                    background: '#0f766e',
-                    color: '#fff',
-                    fontWeight: 600,
-                  }}
+                  className="save-button"
                 >
                   {saving
                     ? 'Saving...'
@@ -710,64 +1006,84 @@ async function download() {
                   onClick={() =>
                     setEditing(false)
                   }
-                  style={{
-                    padding: '10px 16px',
-                    border: '1px solid #d1d5db',
-                    borderRadius: 8,
-                    background: '#fff',
-                  }}
+                  className="cancel-button"
                 >
                   Cancel
                 </button>
+
               </div>
+
             </form>
+
           </section>
+
         )}
 
+        {/* ======================================================
+            MAIN CONTENT
+            ====================================================== */}
+
         <div className="document-content">
-          {/* Preview */}
+
+          {/* ====================================================
+              PREVIEW
+              ==================================================== */}
+
           <div className="preview-panel">
+
             <div className="preview-title">
               Preview
             </div>
 
             <div className="preview-area">
+
+              {/* IMAGE */}
+
               {fileType === 'image' && (
+
                 <img
                   src={fileUrl}
-                  alt={document.name}
+                  alt={documentData.name}
                   className="preview-image"
                   onError={(event) => {
                     event.currentTarget.style.display =
                       'none';
                   }}
                 />
+
               )}
+
+              {/* PDF */}
 
               {fileType === 'pdf' && (
+
                 <iframe
                   src={fileUrl}
-                  title={document.name}
+                  title={documentData.name}
                   className="preview-pdf"
                 />
+
               )}
 
+              {/* VIDEO */}
+
               {fileType === 'video' && (
+
                 <video
                   src={fileUrl}
                   controls
                   className="preview-video"
                 />
+
               )}
 
+              {/* OTHER */}
+
               {fileType === 'other' && (
+
                 <div className="preview-empty">
-                  <div
-                    style={{
-                      fontSize: 48,
-                      marginBottom: 12,
-                    }}
-                  >
+
+                  <div className="preview-empty-icon">
                     📄
                   </div>
 
@@ -776,20 +1092,24 @@ async function download() {
                     this file type.
                   </div>
 
-                  <div
-                    style={{
-                      fontSize: 12,
-                      marginTop: 4,
-                    }}
-                  >
-                    {document.mimeType}
+                  <div className="preview-empty-type">
+                    {documentData.mimeType}
                   </div>
+
                 </div>
+
               )}
+
             </div>
 
+            {/* ==================================================
+                ACTIONS
+                ================================================== */}
+
             <div className="action-buttons">
+
               {canDownload && (
+
                 <button
                   type="button"
                   onClick={download}
@@ -800,9 +1120,11 @@ async function download() {
                     ? 'Downloading...'
                     : '⬇ Download'}
                 </button>
+
               )}
 
               {canEdit && (
+
                 <button
                   type="button"
                   className="edit-button"
@@ -814,9 +1136,11 @@ async function download() {
                     ? 'Close edit'
                     : 'Edit'}
                 </button>
+
               )}
 
               {canDelete && (
+
                 <button
                   type="button"
                   onClick={del}
@@ -827,24 +1151,38 @@ async function download() {
                     ? 'Deleting...'
                     : 'Delete'}
                 </button>
+
               )}
+
             </div>
+
           </div>
 
-          {/* Information */}
+          {/* ====================================================
+              INFORMATION
+              ==================================================== */}
+
           <div className="info-panel">
+
+            {/* DESCRIPTION */}
+
             <div className="info-card">
+
               <div className="info-label">
                 DESCRIPTION
               </div>
 
               <p className="description-text">
-                {document.description ||
+                {documentData.description ||
                   'No description provided.'}
               </p>
+
             </div>
 
+            {/* FILE DETAILS */}
+
             <div className="info-card">
+
               <div
                 className="info-label"
                 style={{
@@ -858,61 +1196,82 @@ async function download() {
                 {
                   label: 'Uploaded by',
                   value:
-                    document.uploadedBy
+                    documentData.uploadedBy
                       ?.fullName || '—',
                 },
+
                 {
                   label: 'Date',
                   value: formatDate(
-                    document.createdAt
+                    documentData.createdAt
                   ),
                 },
+
                 {
                   label: 'Size',
                   value: formatSize(
-                    document.sizeBytes
+                    documentData.sizeBytes
                   ),
                 },
+
                 {
                   label: 'Type',
                   value:
-                    document.mimeType || '—',
+                    documentData.mimeType ||
+                    '—',
                 },
+
                 {
                   label: 'Category',
                   value:
-                    document.category?.name ||
-                    '—',
+                    documentData.category
+                      ?.name || '—',
                 },
+
                 {
                   label: 'Folder',
                   value:
-                    document.folder?.name ||
-                    'Root',
+                    documentData.folder
+                      ?.name || 'Root',
                 },
+
                 {
                   label: 'Access',
                   value:
-                    document.accessLevel ||
+                    documentData.accessLevel ||
                     '—',
                 },
-              ].map(({ label, value }) => (
-                <div
-                  key={label}
-                  className="detail-row"
-                >
-                  <span className="detail-label">
-                    {label}
-                  </span>
 
-                  <span className="detail-value">
-                    {value}
-                  </span>
-                </div>
-              ))}
+              ].map(
+                ({
+                  label,
+                  value,
+                }) => (
+
+                  <div
+                    key={label}
+                    className="detail-row"
+                  >
+
+                    <span className="detail-label">
+                      {label}
+                    </span>
+
+                    <span className="detail-value">
+                      {value}
+                    </span>
+
+                  </div>
+
+                )
+              )}
+
             </div>
+
           </div>
+
         </div>
+
       </div>
     </>
   );
