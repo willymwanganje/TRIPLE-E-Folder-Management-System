@@ -41,7 +41,11 @@ export default function DocumentDetailsPage() {
 
   if (!d) return <Spinner />;
 
-  const fileUrl = `${api.baseUrl}${d.fileUrl}`;
+  // Supabase URLs zinaanza na 'http', za zamani zinaanza na '/uploads'
+  const fileUrl = d.fileUrl?.startsWith('http')
+    ? d.fileUrl
+    : `${api.baseUrl}${d.fileUrl}`;
+
   const fileType = getFileType(d.mimeType);
   const canManage = user?.isSuperAdmin || user?.role?.name === 'Admin' || d.uploadedById === user?.id;
 
