@@ -61,21 +61,14 @@ export default function DocumentDetailsPage() {
       setDeleting(false);
     }
   }
-
-  async function download() {
-    try {
-      const res = await fetch(fileUrl);
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = d.name || 'document';
-      a.click();
-      URL.revokeObjectURL(url);
-    } catch {
-      window.open(fileUrl, '_blank');
-    }
-  }
+function download() {
+  const a = document.createElement('a');
+  a.href = fileUrl;
+  a.download = d.name || 'document';
+  a.target = '_blank';
+  a.rel = 'noreferrer';
+  a.click();
+}
 
   return (
     <div style={{ maxWidth: 960, margin: '0 auto', padding: '24px 20px' }}>
