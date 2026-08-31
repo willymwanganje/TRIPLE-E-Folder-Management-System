@@ -41,7 +41,6 @@ export default function DocumentDetailsPage() {
 
   if (!d) return <Spinner />;
 
-  // Supabase URLs zinaanza na 'http', za zamani zinaanza na '/uploads'
   const fileUrl = d.fileUrl?.startsWith('http')
     ? d.fileUrl
     : `${api.baseUrl}${d.fileUrl}`;
@@ -61,14 +60,15 @@ export default function DocumentDetailsPage() {
       setDeleting(false);
     }
   }
-function download() {
-  const a = document.createElement('a');
-  a.href = fileUrl;
-  a.download = d.name || 'document';
-  a.target = '_blank';
-  a.rel = 'noreferrer';
-  a.click();
-}
+
+  function download() {
+    const a = document.createElement('a');
+    a.href = fileUrl;
+    a.download = d.name || 'document';
+    a.target = '_blank';
+    a.rel = 'noreferrer';
+    a.click();
+  }
 
   return (
     <div style={{ maxWidth: 960, margin: '0 auto', padding: '24px 20px' }}>
@@ -158,7 +158,7 @@ function download() {
             )}
           </div>
 
-          {/* Action buttons */}
+          {/* Action buttons — Download na Delete tu */}
           <div style={{
             padding: '14px 18px', borderTop: '1px solid var(--color-border, #e5e7eb)',
             display: 'flex', gap: 10,
@@ -174,27 +174,12 @@ function download() {
             >
               ⬇ Download
             </button>
-            <a
-              href={fileUrl}
-              target="_blank"
-              rel="noreferrer"
-              style={{
-                flex: 1, padding: '10px 0', borderRadius: 8,
-                border: '1px solid var(--color-border, #e5e7eb)',
-                background: 'transparent', color: 'var(--color-text, #111)',
-                fontWeight: 600, fontSize: 14, cursor: 'pointer',
-                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-                textDecoration: 'none',
-              }}
-            >
-              ↗ Open
-            </a>
             {canManage && (
               <button
                 onClick={del}
                 disabled={deleting}
                 style={{
-                  padding: '10px 16px', borderRadius: 8, border: 'none',
+                  padding: '10px 20px', borderRadius: 8, border: 'none',
                   background: '#fee2e2', color: '#b91c1c',
                   fontWeight: 600, fontSize: 14, cursor: 'pointer',
                 }}
