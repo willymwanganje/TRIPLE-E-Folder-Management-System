@@ -30,19 +30,39 @@ export const editFolder = async (req, res) => {
   await audit({ userId: req.user.id, action: 'UPDATE', entity: 'Folder', entityId: f.id }); res.json(f);
 };
 
-// deleteFolder renamed to removeFolder to match app.js route handler naming convention
 export const removeFolder = async (req, res) => { await deleteFolder(req.params.id); await audit({ userId: req.user.id, action: 'DELETE', entity: 'Folder', entityId: req.params.id }); res.json({ message: 'Folder deleted.' }); };
 
 export const documents = async (req, res) => res.json(await listDocuments(req.query, req.user));
 export const document = async (req, res) => { const d = await getDocument(req.params.id, req.user); if (!d) return res.status(404).json({ message: 'Document not found or access denied.' }); res.json(d); };
+
 export async function uploadDocument(req, res) {
   if (!req.file) return res.status(400).json({ message: 'Please select a file.' });
-  const saved = await saveBuffer(req.file.buffer, req.file.originalname);
+  // Pass mimeType so Supabase stores file with correct content type
+  const saved = await saveBuffer(req.file.buffer, req.file.originalname, req.file.mimetype);
   try {
-    const d = await createDocument({ name: req.body.name?.trim() || req.file.originalname, description: req.body.description?.trim() || null, categoryId: req.body.categoryId, folderId: req.body.folderId || null, fileUrl: saved.url, storageKey: saved.filename, mimeType: req.file.mimetype, sizeBytes: req.file.size, uploadedById: req.user.id, accessLevel: ['PUBLIC', 'RESTRICTED', 'PRIVATE'].includes(req.body.accessLevel) ? req.body.accessLevel : 'PUBLIC', allowedUsers: Array.isArray(req.body.allowedUsers) ? req.body.allowedUsers : [] });
-    await audit({ userId: req.user.id, action: 'UPLOAD', entity: 'Document', entityId: d.id }); res.status(201).json(d);
-  } catch (error) { await removeStoredFile(saved.filename); throw error; }
+    const d = await createDocument({
+      name: req.body.name?.trim() || req.file.originalname,
+      description: req.body.description?.trim() || null,
+      categoryId: req.body.categoryId,
+      folderId: req.body.folderId || null,
+      fileUrl: saved.url,
+      storageKey: saved.filename,
+      mimeType: req.file.mimetype,
+      sizeBytes: req.file.size,
+      uploadedById: req.user.id,
+      accessLevel: ['PUBLIC', 'RESTRICTED', 'PRIVATE'].includes(req.body.accessLevel) ? req.body.accessLevel : 'PUBLIC',
+      allowedUsers: Array.isArray(req.body.allowedUsers) ? req.body.allowedUsers : []
+    });
+    await audit({ userId: req.user.id, action: 'UPLOAD', entity: 'Document', entityId: d.id });
+    res.status(201).json(d);
+  } catch (error) {
+    await removeStoredFile(saved.filename);
+    throw error;
+  }
 }
+
 export const editDocument = async (req, res) => { const d = await updateDocument(req.params.id, { ...(req.body.name !== undefined ? { name: req.body.name.trim() } : {}), ...(req.body.description !== undefined ? { description: req.body.description?.trim() || null } : {}), ...(req.body.categoryId !== undefined ? { categoryId: req.body.categoryId } : {}), ...(req.body.folderId !== undefined ? { folderId: req.body.folderId || null } : {}), ...(req.body.accessLevel !== undefined ? { accessLevel: req.body.accessLevel } : {}), ...(req.body.allowedUsers !== undefined ? { allowedUsers: Array.isArray(req.body.allowedUsers) ? req.body.allowedUsers : [] } : {}) }); await audit({ userId: req.user.id, action: 'UPDATE', entity: 'Document', entityId: d.id }); res.json(d); };
+
 export async function removeDocument(req, res) { const d = await getDocument(req.params.id, req.user); if (!d) return res.status(404).json({ message: 'Document not found or access denied.' }); await removeStoredFile(d.storageKey); await deleteDocument(req.params.id); await audit({ userId: req.user.id, action: 'DELETE', entity: 'Document', entityId: d.id }); res.json({ message: 'Document deleted.' }); }
+
 export const stats = async (req, res) => { const data = await prisma.$queryRaw`SELECT c.name, COUNT(d.id)::int AS count FROM "Category" c LEFT JOIN "Document" d ON d."categoryId"=c.id GROUP BY c.id ORDER BY c.name`; res.json(data); };

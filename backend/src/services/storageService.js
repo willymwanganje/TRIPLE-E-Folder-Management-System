@@ -9,24 +9,10 @@ const supabase = createClient(
 
 const BUCKET = 'triple-e-documents';
 
-/*
-|--------------------------------------------------------------------------
-| ENSURE STORAGE
-|--------------------------------------------------------------------------
-| Called on server startup. With Supabase Storage the bucket already
-| exists, so this is a no-op kept for API compatibility with the old
-| local-filesystem version.
-|--------------------------------------------------------------------------
-*/
 export async function ensureStorage() {
   // Bucket is created manually in Supabase dashboard — nothing to do here.
 }
 
-/*
-|--------------------------------------------------------------------------
-| PUBLIC URL
-|--------------------------------------------------------------------------
-*/
 export function publicUrl(filename) {
   const { data } = supabase.storage
     .from(BUCKET)
@@ -35,19 +21,14 @@ export function publicUrl(filename) {
   return data.publicUrl;
 }
 
-/*
-|--------------------------------------------------------------------------
-| SAVE BUFFER
-|--------------------------------------------------------------------------
-*/
-export async function saveBuffer(buffer, originalName) {
+export async function saveBuffer(buffer, originalName, mimeType = 'application/octet-stream') {
   const safe = originalName.replace(/[^a-zA-Z0-9._-]/g, '_');
   const filename = `${randomUUID()}-${safe}`;
 
   const { error } = await supabase.storage
     .from(BUCKET)
     .upload(filename, buffer, {
-      contentType: 'application/octet-stream',
+      contentType: mimeType,
       upsert: false,
     });
 
@@ -58,11 +39,6 @@ export async function saveBuffer(buffer, originalName) {
   return { filename, url: publicUrl(filename) };
 }
 
-/*
-|--------------------------------------------------------------------------
-| REMOVE STORED FILE
-|--------------------------------------------------------------------------
-*/
 export async function removeStoredFile(filename) {
   if (!filename) return;
 
