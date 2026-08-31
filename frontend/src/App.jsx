@@ -2,29 +2,43 @@ import { useState } from 'react';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 
 import { useAuth } from './context/AuthContext';
+
 import Sidebar from './components/Sidebar';
 import Spinner from './components/Spinner';
 
 import LoginPage from './pages/LoginPage';
 import DashboardPage from './pages/DashboardPage';
+
+import CategoriesPage from './pages/CategoriesPage';
+import FoldersPage from './pages/FoldersPage';
 import DocumentsPage from './pages/DocumentsPage';
 import DocumentDetailsPage from './pages/DocumentDetailsPage';
-import FoldersPage from './pages/FoldersPage';
-import CategoriesPage from './pages/CategoriesPage';
+
 import UploadDocumentPage from './pages/UploadDocumentPage';
 import ProfilePage from './pages/ProfilePage';
 import UsersPage from './pages/UsersPage';
 import UserDetailsPage from './pages/UserDetailsPage';
 
+
+/* =========================================================
+   AUTH GUARD
+   ========================================================= */
+
 function Guard({ children, permission }) {
   const { user, loading } = useAuth();
 
-  if (loading) return <Spinner />;
+  if (loading) {
+    return <Spinner />;
+  }
 
   if (!user) {
     return <Navigate to="/login" replace />;
   }
 
+  /*
+   * Super Admin ana access kila kitu.
+   * Kama route ina permission, user lazima awe nayo.
+   */
   if (
     permission &&
     !user.isSuperAdmin &&
@@ -36,6 +50,11 @@ function Guard({ children, permission }) {
   return children;
 }
 
+
+/* =========================================================
+   MAIN LAYOUT
+   ========================================================= */
+
 function Layout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
@@ -46,9 +65,14 @@ function Layout() {
         position: 'relative',
         minHeight: '100vh',
         display: 'flex',
+        width: '100%',
       }}
     >
-      {/* Mobile overlay */}
+
+      {/* =====================================================
+          MOBILE OVERLAY
+          ===================================================== */}
+
       {sidebarOpen && (
         <div
           onClick={() => setSidebarOpen(false)}
@@ -62,28 +86,45 @@ function Layout() {
         />
       )}
 
-      {/* Sidebar */}
+
+      {/* =====================================================
+          SIDEBAR
+          ===================================================== */}
+
       <div
         className={`sidebar-wrapper ${
           sidebarOpen ? 'sidebar-open' : ''
         }`}
       >
-        <Sidebar onClose={() => setSidebarOpen(false)} />
+        <Sidebar
+          onClose={() => setSidebarOpen(false)}
+        />
       </div>
 
-      {/* Main */}
+
+      {/* =====================================================
+          MAIN CONTENT
+          ===================================================== */}
+
       <main
         className="main-content"
         style={{
           flex: 1,
           minWidth: 0,
+          width: '100%',
         }}
       >
-        {/* Mobile header */}
+
+        {/* ===================================================
+            MOBILE HEADER
+            =================================================== */}
+
         <div className="mobile-header">
+
           <button
             type="button"
             onClick={() => setSidebarOpen(true)}
+            aria-label="Open menu"
             style={{
               background: 'none',
               border: 'none',
@@ -95,7 +136,6 @@ function Layout() {
               alignItems: 'center',
               justifyContent: 'center',
             }}
-            aria-label="Open menu"
           >
             <svg
               width="22"
@@ -120,16 +160,94 @@ function Layout() {
           >
             TRIPLE-E
           </span>
+
         </div>
 
-        <Routes>
-          <Route path="/" element={<DashboardPage />} />
 
-          {/* Documents */}
+        {/* ===================================================
+            APPLICATION ROUTES
+            =================================================== */}
+
+        <Routes>
+
+          {/* ================================================
+              DASHBOARD
+              ================================================ */}
+
+          <Route
+            path="/"
+            element={
+              <DashboardPage />
+            }
+          />
+
+
+          {/* ================================================
+              CATEGORIES
+              
+              /categories
+              → list of categories
+
+              /categories/:categoryId
+              → selected category + its folders
+              ================================================ */}
+
+          <Route
+            path="/categories"
+            element={
+              <Guard>
+                <CategoriesPage />
+              </Guard>
+            }
+          />
+
+          <Route
+            path="/categories/:categoryId"
+            element={
+              <Guard>
+                <CategoriesPage />
+              </Guard>
+            }
+          />
+
+
+          {/* ================================================
+              FOLDERS
+
+              /folders
+              → all folders
+
+              /folders/:folderId
+              → selected folder + files
+              ================================================ */}
+
+          <Route
+            path="/folders"
+            element={
+              <Guard>
+                <FoldersPage />
+              </Guard>
+            }
+          />
+
+          <Route
+            path="/folders/:folderId"
+            element={
+              <Guard>
+                <FoldersPage />
+              </Guard>
+            }
+          />
+
+
+          {/* ================================================
+              DOCUMENTS
+              ================================================ */}
+
           <Route
             path="/documents"
             element={
-              <Guard permission="document.view">
+              <Guard>
                 <DocumentsPage />
               </Guard>
             }
@@ -138,33 +256,17 @@ function Layout() {
           <Route
             path="/documents/:id"
             element={
-              <Guard permission="document.view">
+              <Guard>
                 <DocumentDetailsPage />
               </Guard>
             }
           />
 
-          {/* Categories */}
-          <Route
-            path="/categories"
-            element={
-              <Guard permission="category.view">
-                <CategoriesPage />
-              </Guard>
-            }
-          />
 
-          {/* Folders */}
-          <Route
-            path="/folders"
-            element={
-              <Guard permission="folder.view">
-                <FoldersPage />
-              </Guard>
-            }
-          />
+          {/* ================================================
+              UPLOAD
+              ================================================ */}
 
-          {/* Upload */}
           <Route
             path="/upload"
             element={
@@ -174,13 +276,25 @@ function Layout() {
             }
           />
 
-          {/* Profile */}
+
+          {/* ================================================
+              PROFILE
+              ================================================ */}
+
           <Route
             path="/profile"
-            element={<ProfilePage />}
+            element={
+              <Guard>
+                <ProfilePage />
+              </Guard>
+            }
           />
 
-          {/* Users */}
+
+          {/* ================================================
+              USERS
+              ================================================ */}
+
           <Route
             path="/users"
             element={
@@ -199,19 +313,43 @@ function Layout() {
             }
           />
 
+
+          {/* ================================================
+              UNKNOWN ROUTE
+              ================================================ */}
+
           <Route
             path="*"
-            element={<Navigate to="/" replace />}
+            element={
+              <Navigate to="/categories" replace />
+            }
           />
+
         </Routes>
+
       </main>
 
+
+      {/* =====================================================
+          RESPONSIVE CSS
+          ===================================================== */}
+
       <style>{`
+
+        * {
+          box-sizing: border-box;
+        }
+
         .sidebar-wrapper {
           position: sticky;
           top: 0;
           height: 100vh;
           flex-shrink: 0;
+          z-index: 50;
+        }
+
+        .main-content {
+          min-width: 0;
         }
 
         .mobile-overlay {
@@ -229,15 +367,24 @@ function Layout() {
           z-index: 30;
         }
 
+
+        /* ================================================
+           TABLET / MOBILE
+           ================================================ */
+
         @media (max-width: 768px) {
+
           .sidebar-wrapper {
             position: fixed;
             top: 0;
             left: 0;
             height: 100vh;
             z-index: 50;
+
             transform: translateX(-100%);
-            transition: transform 0.25s ease;
+
+            transition:
+              transform 0.25s ease;
           }
 
           .sidebar-wrapper.sidebar-open {
@@ -254,21 +401,43 @@ function Layout() {
 
           .main-content {
             width: 100%;
+            padding-top: 0;
           }
+
         }
+
       `}</style>
+
     </div>
   );
 }
 
+
+/* =========================================================
+   APP
+   ========================================================= */
+
 export default function App() {
   return (
     <BrowserRouter>
+
       <Routes>
+
+        {/* ================================================
+            LOGIN
+            ================================================ */}
+
         <Route
           path="/login"
-          element={<LoginPage />}
+          element={
+            <LoginPage />
+          }
         />
+
+
+        {/* ================================================
+            PROTECTED APPLICATION
+            ================================================ */}
 
         <Route
           path="*"
@@ -278,7 +447,9 @@ export default function App() {
             </Guard>
           }
         />
+
       </Routes>
+
     </BrowserRouter>
   );
 }
