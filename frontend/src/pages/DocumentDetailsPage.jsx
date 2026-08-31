@@ -87,19 +87,32 @@ export default function DocumentDetailsPage() {
     }
   }
 
-  function download() {
-    const a = document.createElement('a');
+  async function download() {
+  try {
+    const response = await fetch(fileUrl);
 
-    a.href = fileUrl;
+    if (!response.ok) {
+      throw new Error('Failed to download the file.');
+    }
+
+    const blob = await response.blob();
+
+    const blobUrl = window.URL.createObjectURL(blob);
+
+    const a = document.createElement('a');
+    a.href = blobUrl;
     a.download = d.name || 'document';
-    a.target = '_blank';
-    a.rel = 'noreferrer';
 
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
-  }
 
+    window.URL.revokeObjectURL(blobUrl);
+  } catch (error) {
+    console.error('Download error:', error);
+    push('Unable to download the file. Please try again.', 'error');
+  }
+}
   return (
     <>
       {/* =========================================================
