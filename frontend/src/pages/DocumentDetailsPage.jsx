@@ -159,57 +159,41 @@ export default function DocumentDetailsPage() {
       'document.download'
     );
 
-  async function download() {
-    if (!canDownload) {
-      push(
-        'You do not have permission to download this file.',
-        'error'
-      );
-      return;
+async function download() {
+  try {
+    const response = await fetch(fileUrl, {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${localStorage.getItem('tripleE_token')}`,
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`Download failed (${response.status})`);
     }
 
-    setDownloading(true);
+    const blob = await response.blob();
 
-    try {
-      const blob =
-        await api.downloadFile(fileUrl);
+    const blobUrl = window.URL.createObjectURL(blob);
 
-      const blobUrl =
-        window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = blobUrl;
+    link.download = d.name || 'document';
 
-      const anchor =
-        document.createElement('a');
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
 
-      anchor.href = blobUrl;
-      anchor.download =
-        document.name || 'document';
-
-      anchor.style.display = 'none';
-
-      document.body.appendChild(anchor);
-
-      anchor.click();
-
-      anchor.remove();
-
-      setTimeout(() => {
-        window.URL.revokeObjectURL(blobUrl);
-      }, 1000);
-    } catch (error) {
-      console.error(
-        'Download error:',
-        error
-      );
-
-      push(
-        error.message ||
-          'Unable to download the file.',
-        'error'
-      );
-    } finally {
-      setDownloading(false);
-    }
+    window.URL.revokeObjectURL(blobUrl);
+  } catch (error) {
+    console.error('Download error:', error);
+    push(
+      error.message || 'Unable to download the file.',
+      'error'
+    );
   }
+}
+
 
   async function saveChanges(event) {
     event.preventDefault();
