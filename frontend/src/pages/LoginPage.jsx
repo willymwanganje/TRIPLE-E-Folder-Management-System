@@ -185,6 +185,10 @@ export default function LoginPage() {
           width: 200px;
           height: auto;
           margin-bottom: 24px;
+          background: #fff;
+          border-radius: 12px;
+          padding: 12px 16px;
+          display: inline-block;
         }
 
         .login-logo-box img {
