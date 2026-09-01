@@ -46,7 +46,6 @@ export default function LoginPage() {
             />
           </div>
 
-          <div className="brand-tagline">ENTERPRISE DOCUMENT CONTROL</div>
           <div className="brand-title">TRIPLE-E</div>
           <p className="brand-description">
             Securely organize, manage and govern Rice Council of Tanzania
@@ -183,22 +182,16 @@ export default function LoginPage() {
         }
 
         .login-logo-box {
-          width: 72px;
-          height: 72px;
-          border-radius: 16px;
-          background: #fff;
-          display: grid;
-          place-items: center;
-          margin-bottom: 28px;
-          overflow: hidden;
-          box-shadow: 0 4px 20px rgba(0,0,0,.2);
+          width: 200px;
+          height: auto;
+          margin-bottom: 24px;
         }
 
         .login-logo-box img {
           width: 100%;
-          height: 100%;
+          height: auto;
           object-fit: contain;
-          padding: 8px;
+          filter: brightness(0) invert(1);
         }
 
         .brand-tagline {
@@ -393,8 +386,8 @@ export default function LoginPage() {
           }
 
           .login-logo-box {
-            width: 56px; height: 56px;
-            border-radius: 12px;
+            width: 160px;
+            height: auto;
             margin-bottom: 16px;
           }
 
