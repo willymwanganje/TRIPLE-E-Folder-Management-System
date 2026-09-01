@@ -120,11 +120,7 @@ export default function LoginPage() {
             {busy ? 'Signing in…' : 'Sign in'}
           </button>
 
-          <div className="demo-box">
-            <strong>Local Super Admin</strong>
-            <br />
-            admin@triple-e.local · Admin@12345
-          </div>
+      
 
         </form>
 
