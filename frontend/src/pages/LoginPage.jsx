@@ -48,7 +48,7 @@ export default function LoginPage() {
 
           <div className="brand-title">Triple-E File Management System</div>
           <p className="brand-description">
-            Securely organize, manage and govern Rice Council of Tanzania
+            Securely organize, manage and govern Triple-e Company Limited
             documents, folders and access.
           </p>
 
