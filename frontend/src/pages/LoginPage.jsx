@@ -182,19 +182,22 @@ export default function LoginPage() {
         }
 
         .login-logo-box {
-          width: 200px;
-          height: auto;
+          width: 220px;
+          height: 100px;
           margin-bottom: 24px;
           background: #fff;
           border-radius: 12px;
-          padding: 12px 16px;
-          display: inline-block;
+          padding: 0;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          overflow: hidden;
         }
 
         .login-logo-box img {
           width: 100%;
-          height: auto;
-          object-fit: contain;
+          height: 100%;
+          object-fit: cover;
         }
 
         .brand-tagline {
