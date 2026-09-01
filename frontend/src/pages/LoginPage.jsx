@@ -125,7 +125,7 @@ export default function LoginPage() {
         </form>
 
         <div className="login-footer">
-          © {new Date().getFullYear()} Triple-E · Rice Council of Tanzania
+          © {new Date().getFullYear()} Triple-E Company Limited. All rights reserved.
         </div>
       </section>
 
