@@ -48,7 +48,7 @@ export default function LoginPage() {
 
           <div className="brand-title">Triple-E File Management System</div>
           <p className="brand-description">
-            Securely organize, manage and govern Triple-e company limited
+            Securely organize, manage and govern Rice Council of Tanzania
             documents, folders and access.
           </p>
 
@@ -197,8 +197,8 @@ export default function LoginPage() {
         .login-logo-box img {
           width: 100%;
           height: 100%;
-          object-fit: contain;
-          padding: 12px 16px;
+          object-fit: cover;
+          padding: 0;
         }
 
         .brand-title {
