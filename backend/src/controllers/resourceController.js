@@ -6,12 +6,54 @@ import { prisma } from '../config/prisma.js';
 import { audit } from '../services/auditService.js';
 
 export const categories = async (req, res) => res.json(await listCategories());
-export const addCategory = async (req, res) => { const c = await createCategory(req.body); await audit({ userId: req.user.id, action: 'CREATE', entity: 'Category', entityId: c.id }); res.status(201).json(c); };
-export const editCategory = async (req, res) => { const c = await updateCategory(req.params.id, req.body); await audit({ userId: req.user.id, action: 'UPDATE', entity: 'Category', entityId: c.id }); res.json(c); };
-export const removeCategory = async (req, res) => { await deleteCategory(req.params.id); await audit({ userId: req.user.id, action: 'DELETE', entity: 'Category', entityId: req.params.id }); res.json({ message: 'Category deleted.' }); };
+
+export const addCategory = async (req, res) => {
+  const c = await createCategory(req.body);
+  await audit({ userId: req.user.id, action: 'CREATE', entity: 'Category', entityId: c.id });
+  res.status(201).json(c);
+};
+
+export const editCategory = async (req, res) => {
+  const c = await updateCategory(req.params.id, req.body);
+  await audit({ userId: req.user.id, action: 'UPDATE', entity: 'Category', entityId: c.id });
+  res.json(c);
+};
+
+export const removeCategory = async (req, res) => {
+  const { id } = req.params;
+
+  // Check if category has documents
+  const docCount = await prisma.document.count({ where: { categoryId: id } });
+  if (docCount > 0) {
+    return res.status(400).json({
+      message: `Cannot delete this category because it contains ${docCount} document${docCount > 1 ? 's' : ''}. Please delete or move the documents first.`,
+    });
+  }
+
+  // Check if category has folders with documents
+  const folders = await prisma.folder.findMany({ where: { categoryId: id }, select: { id: true, name: true } });
+  for (const folder of folders) {
+    const folderDocCount = await prisma.document.count({ where: { folderId: folder.id } });
+    if (folderDocCount > 0) {
+      return res.status(400).json({
+        message: `Cannot delete this category because the folder "${folder.name}" inside it contains ${folderDocCount} document${folderDocCount > 1 ? 's' : ''}. Please delete or move the documents first.`,
+      });
+    }
+  }
+
+  await deleteCategory(id);
+  await audit({ userId: req.user.id, action: 'DELETE', entity: 'Category', entityId: id });
+  res.json({ message: 'Category deleted.' });
+};
 
 export const folders = async (req, res) => res.json(await listFolders(req.query, req.user));
-export const folder = async (req, res) => { const f = await getFolder(req.params.id, req.user); if (!f) return res.status(404).json({ message: 'Folder not found or access denied.' }); res.json(f); };
+
+export const folder = async (req, res) => {
+  const f = await getFolder(req.params.id, req.user);
+  if (!f) return res.status(404).json({ message: 'Folder not found or access denied.' });
+  res.json(f);
+};
+
 export const addFolder = async (req, res) => {
   const f = await createFolder({
     name: req.body.name?.trim(), description: req.body.description?.trim() || null, categoryId: req.body.categoryId,
@@ -19,25 +61,49 @@ export const addFolder = async (req, res) => {
     accessLevel: ['PUBLIC', 'RESTRICTED', 'PRIVATE'].includes(req.body.accessLevel) ? req.body.accessLevel : 'PUBLIC',
     allowedUsers: Array.isArray(req.body.allowedUsers) ? req.body.allowedUsers : []
   });
-  await audit({ userId: req.user.id, action: 'CREATE', entity: 'Folder', entityId: f.id }); res.status(201).json(f);
+  await audit({ userId: req.user.id, action: 'CREATE', entity: 'Folder', entityId: f.id });
+  res.status(201).json(f);
 };
+
 export const editFolder = async (req, res) => {
   const f = await updateFolder(req.params.id, {
-    ...(req.body.name !== undefined ? { name: req.body.name.trim() } : {}), ...(req.body.description !== undefined ? { description: req.body.description?.trim() || null } : {}),
-    ...(req.body.parentId !== undefined ? { parentId: req.body.parentId || null } : {}), ...(req.body.categoryId !== undefined ? { categoryId: req.body.categoryId } : {}),
-    ...(req.body.accessLevel !== undefined ? { accessLevel: req.body.accessLevel } : {}), ...(req.body.allowedUsers !== undefined ? { allowedUsers: Array.isArray(req.body.allowedUsers) ? req.body.allowedUsers : [] } : {})
+    ...(req.body.name !== undefined ? { name: req.body.name.trim() } : {}),
+    ...(req.body.description !== undefined ? { description: req.body.description?.trim() || null } : {}),
+    ...(req.body.parentId !== undefined ? { parentId: req.body.parentId || null } : {}),
+    ...(req.body.categoryId !== undefined ? { categoryId: req.body.categoryId } : {}),
+    ...(req.body.accessLevel !== undefined ? { accessLevel: req.body.accessLevel } : {}),
+    ...(req.body.allowedUsers !== undefined ? { allowedUsers: Array.isArray(req.body.allowedUsers) ? req.body.allowedUsers : [] } : {})
   });
-  await audit({ userId: req.user.id, action: 'UPDATE', entity: 'Folder', entityId: f.id }); res.json(f);
+  await audit({ userId: req.user.id, action: 'UPDATE', entity: 'Folder', entityId: f.id });
+  res.json(f);
 };
 
-export const removeFolder = async (req, res) => { await deleteFolder(req.params.id); await audit({ userId: req.user.id, action: 'DELETE', entity: 'Folder', entityId: req.params.id }); res.json({ message: 'Folder deleted.' }); };
+export const removeFolder = async (req, res) => {
+  const { id } = req.params;
+
+  // Check if folder has documents
+  const docCount = await prisma.document.count({ where: { folderId: id } });
+  if (docCount > 0) {
+    return res.status(400).json({
+      message: `Cannot delete this folder because it contains ${docCount} document${docCount > 1 ? 's' : ''}. Please delete or move the documents first.`,
+    });
+  }
+
+  await deleteFolder(id);
+  await audit({ userId: req.user.id, action: 'DELETE', entity: 'Folder', entityId: id });
+  res.json({ message: 'Folder deleted.' });
+};
 
 export const documents = async (req, res) => res.json(await listDocuments(req.query, req.user));
-export const document = async (req, res) => { const d = await getDocument(req.params.id, req.user); if (!d) return res.status(404).json({ message: 'Document not found or access denied.' }); res.json(d); };
+
+export const document = async (req, res) => {
+  const d = await getDocument(req.params.id, req.user);
+  if (!d) return res.status(404).json({ message: 'Document not found or access denied.' });
+  res.json(d);
+};
 
 export async function uploadDocument(req, res) {
   if (!req.file) return res.status(400).json({ message: 'Please select a file.' });
-  // Pass mimeType so Supabase stores file with correct content type
   const saved = await saveBuffer(req.file.buffer, req.file.originalname, req.file.mimetype);
   try {
     const d = await createDocument({
@@ -61,8 +127,29 @@ export async function uploadDocument(req, res) {
   }
 }
 
-export const editDocument = async (req, res) => { const d = await updateDocument(req.params.id, { ...(req.body.name !== undefined ? { name: req.body.name.trim() } : {}), ...(req.body.description !== undefined ? { description: req.body.description?.trim() || null } : {}), ...(req.body.categoryId !== undefined ? { categoryId: req.body.categoryId } : {}), ...(req.body.folderId !== undefined ? { folderId: req.body.folderId || null } : {}), ...(req.body.accessLevel !== undefined ? { accessLevel: req.body.accessLevel } : {}), ...(req.body.allowedUsers !== undefined ? { allowedUsers: Array.isArray(req.body.allowedUsers) ? req.body.allowedUsers : [] } : {}) }); await audit({ userId: req.user.id, action: 'UPDATE', entity: 'Document', entityId: d.id }); res.json(d); };
+export const editDocument = async (req, res) => {
+  const d = await updateDocument(req.params.id, {
+    ...(req.body.name !== undefined ? { name: req.body.name.trim() } : {}),
+    ...(req.body.description !== undefined ? { description: req.body.description?.trim() || null } : {}),
+    ...(req.body.categoryId !== undefined ? { categoryId: req.body.categoryId } : {}),
+    ...(req.body.folderId !== undefined ? { folderId: req.body.folderId || null } : {}),
+    ...(req.body.accessLevel !== undefined ? { accessLevel: req.body.accessLevel } : {}),
+    ...(req.body.allowedUsers !== undefined ? { allowedUsers: Array.isArray(req.body.allowedUsers) ? req.body.allowedUsers : [] } : {})
+  });
+  await audit({ userId: req.user.id, action: 'UPDATE', entity: 'Document', entityId: d.id });
+  res.json(d);
+};
 
-export async function removeDocument(req, res) { const d = await getDocument(req.params.id, req.user); if (!d) return res.status(404).json({ message: 'Document not found or access denied.' }); await removeStoredFile(d.storageKey); await deleteDocument(req.params.id); await audit({ userId: req.user.id, action: 'DELETE', entity: 'Document', entityId: d.id }); res.json({ message: 'Document deleted.' }); }
+export async function removeDocument(req, res) {
+  const d = await getDocument(req.params.id, req.user);
+  if (!d) return res.status(404).json({ message: 'Document not found or access denied.' });
+  await removeStoredFile(d.storageKey);
+  await deleteDocument(req.params.id);
+  await audit({ userId: req.user.id, action: 'DELETE', entity: 'Document', entityId: d.id });
+  res.json({ message: 'Document deleted.' });
+}
 
-export const stats = async (req, res) => { const data = await prisma.$queryRaw`SELECT c.name, COUNT(d.id)::int AS count FROM "Category" c LEFT JOIN "Document" d ON d."categoryId"=c.id GROUP BY c.id ORDER BY c.name`; res.json(data); };
+export const stats = async (req, res) => {
+  const data = await prisma.$queryRaw`SELECT c.name, COUNT(d.id)::int AS count FROM "Category" c LEFT JOIN "Document" d ON d."categoryId"=c.id GROUP BY c.id ORDER BY c.name`;
+  res.json(data);
+};
