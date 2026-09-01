@@ -46,7 +46,7 @@ export default function LoginPage() {
             />
           </div>
 
-          <div className="brand-title">TRIPLE-E</div>
+          <div className="brand-title">Triple-E File Management System</div>
           <p className="brand-description">
             Securely organize, manage and govern Rice Council of Tanzania
             documents, folders and access.
@@ -182,39 +182,31 @@ export default function LoginPage() {
         }
 
         .login-logo-box {
-          width: 220px;
-          height: 100px;
-          margin-bottom: 24px;
+          width: 240px;
+          height: 110px;
+          margin-bottom: 28px;
           background: #fff;
-          border-radius: 12px;
-          padding: 0;
+          border-radius: 14px;
           display: flex;
           align-items: center;
           justify-content: center;
           overflow: hidden;
+          box-shadow: 0 4px 20px rgba(0,0,0,.15);
         }
 
         .login-logo-box img {
           width: 100%;
           height: 100%;
-          object-fit: cover;
-        }
-
-        .brand-tagline {
-          font-size: 11px;
-          font-weight: 700;
-          letter-spacing: .12em;
-          color: rgba(255,255,255,.6);
-          text-transform: uppercase;
-          margin-bottom: 8px;
+          object-fit: contain;
+          padding: 12px 16px;
         }
 
         .brand-title {
-          font-size: clamp(38px, 5vw, 58px);
-          font-weight: 900;
-          line-height: 1;
-          letter-spacing: .02em;
-          margin-bottom: 16px;
+          font-size: clamp(20px, 2.8vw, 28px);
+          font-weight: 800;
+          line-height: 1.25;
+          letter-spacing: .01em;
+          margin-bottom: 14px;
         }
 
         .brand-description {
@@ -392,13 +384,13 @@ export default function LoginPage() {
           }
 
           .login-logo-box {
-            width: 160px;
-            height: auto;
+            width: 180px;
+            height: 80px;
             margin-bottom: 16px;
+            border-radius: 10px;
           }
 
-          .brand-tagline { font-size: 10px; margin-bottom: 4px; }
-          .brand-title { font-size: 32px; margin-bottom: 10px; }
+          .brand-title { font-size: 18px; margin-bottom: 10px; }
           .brand-description { font-size: 13px; margin-bottom: 20px; }
           .brand-features { gap: 10px; }
           .brand-feature { font-size: 13px; }
@@ -418,6 +410,7 @@ export default function LoginPage() {
           .login-brand-panel { padding: 20px 14px; }
           .login-form-panel { padding: 20px 12px 28px; }
           .login-card { padding: 20px 16px; }
+          .login-logo-box { width: 150px; height: 68px; }
         }
       `}</style>
     </main>
